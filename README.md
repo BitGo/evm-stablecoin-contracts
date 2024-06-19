@@ -1,0 +1,2 @@
+# GoUSD
+GoUSD Token contract
