@@ -10,12 +10,15 @@ describe("GoUSD pause", function () {
   let supplyController: SignerWithAddress;
   let upgrader: SignerWithAddress;
   let reserve: SignerWithAddress;
+  let blacklister: SignerWithAddress;
 
   before(async function () {
-    const signers = await ethers.getSigners();
-    [defaultAdmin, freezer, supplyController, upgrader, reserve] = await ethers.getSigners();
+    [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("GoUSD");
-    const contract = await upgrades.deployProxy(ContractFactory, [defaultAdmin.address, freezer.address, supplyController.address, upgrader.address, reserve.address], { kind: 'uups' });
+    const contract = await upgrades.deployProxy(
+      ContractFactory,
+      [defaultAdmin.address, freezer.address, supplyController.address, upgrader.address, blacklister.address, [reserve.address]],
+      { kind: 'uups' });
     contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
   });
 

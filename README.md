@@ -5,7 +5,8 @@ Roles:
 - owner: deploys the proxy
 - upgrader: can upgrade the contracts
 - supplyController: can mint and burn tokens
-- freezer: can pause/unpause contracts and freeze addresses
+- freezer: can pause/unpause contracts
+- blacklister: can freeze addresses
 
 ## Installing dependencies
 
@@ -29,7 +30,8 @@ FREEZER_ADDRESS=<...>
 SUPPLY_CONTROLLER_ADDRESS=<...>
 UPGRADER_ADDRESS=<...>
 ADMIN_ADDRESS=<...>
-RESERVE_ADDRESS=<...>
+BLACKLISTER_ADDRESS=<...>
+RESERVE_ADDRESSES=<...,...,...>
 ```
 You can target any network from your Hardhat config using:
 
