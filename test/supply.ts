@@ -9,13 +9,18 @@ describe("GoUSD Minting and Burning", function () {
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
   let upgrader: SignerWithAddress;
-  let reserve: SignerWithAddress;
+  let reserve1: SignerWithAddress;
+  let reserve2: SignerWithAddress;
+  let blacklister: SignerWithAddress;
 
   before(async function () {
-    const signers = await ethers.getSigners();
-    [defaultAdmin, freezer, supplyController, upgrader, reserve] = await ethers.getSigners();
+    [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve1, reserve2] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("GoUSD");
-    const contract = await upgrades.deployProxy(ContractFactory, [defaultAdmin.address, freezer.address, supplyController.address, upgrader.address, reserve.address], { kind: 'uups' });
+    const contract = await upgrades.deployProxy(
+      ContractFactory,
+      [defaultAdmin.address, freezer.address, supplyController.address, upgrader.address, blacklister.address, [reserve1.address, reserve2.address]],
+      { kind: 'uups' }
+    );
     contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
   });
 
@@ -26,21 +31,55 @@ describe("GoUSD Minting and Burning", function () {
     expect(paused).to.be.false;
   });
 
-  it("Should mint tokens successfully", async function () {
+  it("Should correctly identify reserve addresses", async function () {
+    const isReserve1 = await contractInstance.isReserveAddress(reserve1.address);
+    const isReserve2 = await contractInstance.isReserveAddress(reserve2.address);
+  
+    expect(isReserve1).to.be.true;
+    expect(isReserve2).to.be.true;
+  });
+  
+  it("Should mint tokens successfully to reserve1", async function () {
     const mintAmount = ethers.parseUnits("1000", 18);
-    await contractInstance.connect(supplyController).mint(mintAmount);
-    const balance = await contractInstance.balanceOf(reserve.address);
+    await contractInstance.connect(supplyController).mint(reserve1.address, mintAmount);
+    const balance = await contractInstance.balanceOf(reserve1.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
   });
 
-  it("Should burn tokens successfully", async function () {
-    const initialBalance = await contractInstance.balanceOf(reserve.address);
+  it("Should burn tokens successfully from reserve1", async function () {
+    const initialBalance = await contractInstance.balanceOf(reserve1.address);
     const burnAmount = ethers.parseUnits("500", 18);
-    await contractInstance.connect(supplyController).burn(burnAmount);
-    const finalBalance = await contractInstance.balanceOf(reserve.address);
+    await contractInstance.connect(supplyController).burn(reserve1.address, burnAmount);
+    const finalBalance = await contractInstance.balanceOf(reserve1.address);
     expect(finalBalance).to.equal(initialBalance - burnAmount);
     expect(await contractInstance.totalSupply()).to.equal(initialBalance - burnAmount);
+  });
+
+  it("Should fail to mint tokens to a non-reserve address", async function () {
+    const mintAmount = ethers.parseUnits("1000", 18);
+    let failed = false;
+    try {
+      // Attempt to mint tokens to a non-reserve address (e.g., freezer)
+      await contractInstance.connect(supplyController).mint(freezer.address, mintAmount);
+    } catch (error) {
+      failed = true;
+      expect(error).to.be.an('error');
+    }
+    expect(failed).to.be.true;
+  });
+  
+  it("Should fail to burn tokens from a non-reserve address", async function () {
+    const burnAmount = ethers.parseUnits("500", 18);
+    let failed = false;
+    try {
+      // Attempt to burn tokens from a non-reserve address (e.g., freezer)
+      await contractInstance.connect(supplyController).burn(freezer.address, burnAmount);
+    } catch (error) {
+      failed = true;
+      expect(error).to.be.an('error');
+    }
+    expect(failed).to.be.true;
   });
 
   it("Should fail to mint tokens when called by unauthorized address", async function () {
@@ -48,7 +87,7 @@ describe("GoUSD Minting and Burning", function () {
     let failed = false;
     try {
       // Attempt to mint tokens by an unauthorized signer (e.g., defaultAdmin)
-      await contractInstance.connect(defaultAdmin).mint(mintAmount);
+      await contractInstance.connect(defaultAdmin).mint(reserve1.address, mintAmount);
     } catch (error) {
       failed = true;
       expect(error).to.be.an('error');
@@ -61,7 +100,7 @@ describe("GoUSD Minting and Burning", function () {
     let failed = false;
     try {
       // Attempt to burn tokens by an unauthorized signer (e.g., defaultAdmin)
-      await contractInstance.connect(defaultAdmin).burn(burnAmount);
+      await contractInstance.connect(defaultAdmin).burn(reserve1.address, burnAmount);
     } catch (error) {
       failed = true;
       expect(error).to.be.an('error');
