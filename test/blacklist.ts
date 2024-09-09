@@ -12,14 +12,24 @@ describe("GoUSD blacklist", function () {
   let reserve: SignerWithAddress;
   let blacklister: SignerWithAddress;
   let targetAccount: SignerWithAddress;
+  let withdrawer: SignerWithAddress;
 
   before(async function () {
-    [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, targetAccount] = await ethers.getSigners();
+    [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, withdrawer, targetAccount] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("GoUSD");
     const contract = await upgrades.deployProxy(
       ContractFactory,
-      [defaultAdmin.address, freezer.address, supplyController.address, upgrader.address, blacklister.address, [reserve.address]],
-      { kind: 'uups' });
+      [
+        defaultAdmin.address,
+        freezer.address,
+        supplyController.address,
+        upgrader.address,
+        blacklister.address,
+        withdrawer.address,
+        [reserve.address],
+      ],
+      { kind: "uups" }
+    );
     contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
 
     // Mint tokens to reserve
