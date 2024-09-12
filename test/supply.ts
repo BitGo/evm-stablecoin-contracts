@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { GoUSD } from "../typechain-types";
+import { USDS } from "../typechain-types";
 
-describe("GoUSD Minting and Burning", function () {
-  let contractInstance: GoUSD;
+describe("USDS Minting and Burning", function () {
+  let contractInstance: USDS;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
@@ -29,7 +29,7 @@ describe("GoUSD Minting and Burning", function () {
       withdrawer,
       recoverAddress,
     ] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("GoUSD");
+    const ContractFactory = await ethers.getContractFactory("USDS");
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -43,7 +43,7 @@ describe("GoUSD Minting and Burning", function () {
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
+    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
   });
 
   it("Should have 0 total supply on init and unpaused", async function () {

@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { GoUSD } from "../typechain-types";
+import { USDS } from "../typechain-types";
 
-describe("GoUSD blacklist", function () {
-  let contractInstance: GoUSD;
+describe("USDS blacklist", function () {
+  let contractInstance: USDS;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
@@ -16,7 +16,7 @@ describe("GoUSD blacklist", function () {
 
   before(async function () {
     [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, withdrawer, targetAccount] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("GoUSD");
+    const ContractFactory = await ethers.getContractFactory("USDS");
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -30,7 +30,7 @@ describe("GoUSD blacklist", function () {
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
+    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
 
     // Mint tokens to reserve
     await contractInstance.connect(supplyController).mint(reserve.address, 1000);

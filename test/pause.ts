@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { GoUSD } from "../typechain-types";
+import { USDS } from "../typechain-types";
 
-describe("GoUSD pause", function () {
-  let contractInstance: GoUSD;
+describe("USDS pause", function () {
+  let contractInstance: USDS;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
@@ -15,7 +15,7 @@ describe("GoUSD pause", function () {
 
   before(async function () {
     [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, withdrawer] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("GoUSD");
+    const ContractFactory = await ethers.getContractFactory("USDS");
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -29,7 +29,7 @@ describe("GoUSD pause", function () {
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
+    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
   });
 
   it("Should not be able to pause as unauthorized address", async function () {
