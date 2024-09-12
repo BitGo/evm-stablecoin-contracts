@@ -10,15 +10,21 @@ import {ERC20PermitUpgradeable} from "./openzeppelin/ERC20PermitUpgradeable.sol"
 import "./Blacklistable.sol";
 
 /// @custom:security-contact support@bitgo.com
-contract USDS is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
+contract USDS is
+    Initializable,
+    Blacklistable,
+    ERC20PausableUpgradeable,
+    ERC20PermitUpgradeable,
+    UUPSUpgradeable
+{
     using SafeERC20 for IERC20;
-    
+
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
-    bytes32 public constant SUPPLY_CONTROLLER_ROLE = keccak256("SUPPLY_CONTROLLER_ROLE");
+    bytes32 public constant SUPPLY_CONTROLLER_ROLE =
+        keccak256("SUPPLY_CONTROLLER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
-
 
     mapping(address => bool) public reserveAddresses;
 
@@ -58,7 +64,13 @@ contract USDS is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20Pe
         }
     }
 
-    function decimals() public view virtual override(InternalERC20Upgradeable) returns (uint8) {
+    function decimals()
+        public
+        view
+        virtual
+        override(InternalERC20Upgradeable)
+        returns (uint8)
+    {
         return 6;
     }
 
@@ -70,12 +82,16 @@ contract USDS is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20Pe
         _unpause();
     }
 
-    function addReserveAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addReserveAddress(
+        address newAddress
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         reserveAddresses[newAddress] = true;
         emit ReserveAddressAdded(newAddress);
     }
 
-    function removeReserveAddress(address oldAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeReserveAddress(
+        address oldAddress
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         reserveAddresses[oldAddress] = false;
         emit ReserveAddressRemoved(oldAddress);
     }
@@ -84,37 +100,62 @@ contract USDS is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20Pe
         return reserveAddresses[account];
     }
 
-    function mint(address to, uint256 amount) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    function mint(
+        address to,
+        uint256 amount
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(reserveAddresses[to], "Address is not a reserve address");
         _mint(to, amount);
         emit Mint(to, amount);
     }
 
-    function burn(address from, uint256 amount) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    function burn(
+        address from,
+        uint256 amount
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(reserveAddresses[from], "Address is not a reserve address");
         _burn(from, amount);
         emit Burn(from, amount);
     }
 
-    function withdraw(IERC20 token, address recipient, uint256 amount) public onlyRole(WITHDRAWER_ROLE) {
+    function withdraw(
+        IERC20 token,
+        address recipient,
+        uint256 amount
+    ) public onlyRole(WITHDRAWER_ROLE) {
         token.safeTransfer(recipient, amount);
     }
-    
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        onlyRole(UPGRADER_ROLE)
-        override
-    {}
+
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRole(UPGRADER_ROLE) {}
 
     // The following functions are overrides required by Solidity.
 
-    function _update(address from, address to, uint256 value)
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    )
         internal
-        override(Blacklistable, InternalERC20Upgradeable, ERC20PausableUpgradeable) {
+        override(
+            Blacklistable,
+            InternalERC20Upgradeable,
+            ERC20PausableUpgradeable
+        )
+    {
         ERC20PausableUpgradeable._update(from, to, value);
     }
 
-    function balanceOf(address account) public view virtual override(Blacklistable, InternalERC20Upgradeable) returns (uint256) {
+    function balanceOf(
+        address account
+    )
+        public
+        view
+        virtual
+        override(Blacklistable, InternalERC20Upgradeable)
+        returns (uint256)
+    {
         return Blacklistable.balanceOf(account);
     }
 }

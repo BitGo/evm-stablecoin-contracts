@@ -31,23 +31,28 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * This allows applications to reconstruct the allowance for all accounts just
  * by listening to said events. Other implementations of the EIP may not emit
  * these events, as it isn't required by the specification.
- * The storage slot is accesible by derived contract to modify the storage directly. Not recommended to use in other contracts than blacklisted.
+ * The storage slot is accesible by derived contract to modify the storage directly. 
+ * Not recommended to use in other contracts than blacklisted.
  */
-abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable, IERC20, IERC20Metadata, IERC20Errors {
+abstract contract InternalERC20Upgradeable is
+    Initializable,
+    ContextUpgradeable,
+    IERC20,
+    IERC20Metadata,
+    IERC20Errors
+{
     /// @custom:storage-location erc7201:openzeppelin.storage.ERC20
     struct ERC20Storage {
         mapping(address account => uint256) _balances;
-
         mapping(address account => mapping(address spender => uint256)) _allowances;
-
         uint256 _totalSupply;
-
         string _name;
         string _symbol;
     }
 
     // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant ERC20StorageLocation = 0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
+    bytes32 private constant ERC20StorageLocation =
+        0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
 
     function _getERC20Storage() internal pure returns (ERC20Storage storage $) {
         assembly {
@@ -61,11 +66,17 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
      * All two of these values are immutable: they can only be set once during
      * construction.
      */
-    function __ERC20_init(string memory name_, string memory symbol_) internal onlyInitializing {
+    function __ERC20_init(
+        string memory name_,
+        string memory symbol_
+    ) internal onlyInitializing {
         __ERC20_init_unchained(name_, symbol_);
     }
 
-    function __ERC20_init_unchained(string memory name_, string memory symbol_) internal onlyInitializing {
+    function __ERC20_init_unchained(
+        string memory name_,
+        string memory symbol_
+    ) internal onlyInitializing {
         ERC20Storage storage $ = _getERC20Storage();
         $._name = name_;
         $._symbol = symbol_;
@@ -138,7 +149,10 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
     /**
      * @dev See {IERC20-allowance}.
      */
-    function allowance(address owner, address spender) public view virtual returns (uint256) {
+    function allowance(
+        address owner,
+        address spender
+    ) public view virtual returns (uint256) {
         ERC20Storage storage $ = _getERC20Storage();
         return $._allowances[owner][spender];
     }
@@ -153,7 +167,10 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
      *
      * - `spender` cannot be the zero address.
      */
-    function approve(address spender, uint256 value) public virtual returns (bool) {
+    function approve(
+        address spender,
+        uint256 value
+    ) public virtual returns (bool) {
         address owner = _msgSender();
         _approve(owner, spender, value);
         return true;
@@ -175,7 +192,11 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
      * - the caller must have allowance for ``from``'s tokens of at least
      * `value`.
      */
-    function transferFrom(address from, address to, uint256 value) public virtual returns (bool) {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) public virtual returns (bool) {
         address spender = _msgSender();
         _spendAllowance(from, spender, value);
         _transfer(from, to, value);
@@ -306,7 +327,12 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
      *
      * Requirements are the same as {_approve}.
      */
-    function _approve(address owner, address spender, uint256 value, bool emitEvent) internal virtual {
+    function _approve(
+        address owner,
+        address spender,
+        uint256 value,
+        bool emitEvent
+    ) internal virtual {
         ERC20Storage storage $ = _getERC20Storage();
         if (owner == address(0)) {
             revert ERC20InvalidApprover(address(0));
@@ -328,11 +354,19 @@ abstract contract InternalERC20Upgradeable is Initializable, ContextUpgradeable,
      *
      * Does not emit an {Approval} event.
      */
-    function _spendAllowance(address owner, address spender, uint256 value) internal virtual {
+    function _spendAllowance(
+        address owner,
+        address spender,
+        uint256 value
+    ) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
             if (currentAllowance < value) {
-                revert ERC20InsufficientAllowance(spender, currentAllowance, value);
+                revert ERC20InsufficientAllowance(
+                    spender,
+                    currentAllowance,
+                    value
+                );
             }
             unchecked {
                 _approve(owner, spender, currentAllowance - value, false);
