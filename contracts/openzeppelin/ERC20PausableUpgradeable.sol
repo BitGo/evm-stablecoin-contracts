@@ -20,13 +20,17 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * access control, e.g. using {AccessControl} or {Ownable}. Not doing so will
  * make the contract pause mechanism of the contract unreachable, and thus unusable.
  */
-abstract contract ERC20PausableUpgradeable is Initializable, Blacklistable, PausableUpgradeable {
+abstract contract ERC20PausableUpgradeable is
+    Initializable,
+    Blacklistable,
+    PausableUpgradeable
+{
     function __ERC20Pausable_init() internal onlyInitializing {
         __Pausable_init_unchained();
     }
 
-    function __ERC20Pausable_init_unchained() internal onlyInitializing {
-    }
+    function __ERC20Pausable_init_unchained() internal onlyInitializing {}
+
     /**
      * @dev See {ERC20-_update}.
      *
@@ -34,7 +38,11 @@ abstract contract ERC20PausableUpgradeable is Initializable, Blacklistable, Paus
      *
      * - the contract must not be paused.
      */
-    function _update(address from, address to, uint256 value) internal virtual override whenNotPaused {
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual override whenNotPaused {
         super._update(from, to, value);
     }
 }

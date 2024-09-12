@@ -18,9 +18,17 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * presenting a message signed by the account. By not relying on `{IERC20-approve}`, the token holder account doesn't
  * need to send a transaction, and thus is not required to hold Ether at all.
  */
-abstract contract ERC20PermitUpgradeable is Initializable, InternalERC20Upgradeable, IERC20Permit, EIP712Upgradeable, NoncesUpgradeable {
+abstract contract ERC20PermitUpgradeable is
+    Initializable,
+    InternalERC20Upgradeable,
+    IERC20Permit,
+    EIP712Upgradeable,
+    NoncesUpgradeable
+{
     bytes32 private constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+        keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+        );
 
     /**
      * @dev Permit deadline has expired.
@@ -41,7 +49,9 @@ abstract contract ERC20PermitUpgradeable is Initializable, InternalERC20Upgradea
         __EIP712_init_unchained(name, "1");
     }
 
-    function __ERC20Permit_init_unchained(string memory) internal onlyInitializing {}
+    function __ERC20Permit_init_unchained(
+        string memory
+    ) internal onlyInitializing {}
 
     /**
      * @inheritdoc IERC20Permit
@@ -59,7 +69,16 @@ abstract contract ERC20PermitUpgradeable is Initializable, InternalERC20Upgradea
             revert ERC2612ExpiredSignature(deadline);
         }
 
-        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                PERMIT_TYPEHASH,
+                owner,
+                spender,
+                value,
+                _useNonce(owner),
+                deadline
+            )
+        );
 
         bytes32 hash = _hashTypedDataV4(structHash);
 
@@ -74,7 +93,15 @@ abstract contract ERC20PermitUpgradeable is Initializable, InternalERC20Upgradea
     /**
      * @inheritdoc IERC20Permit
      */
-    function nonces(address owner) public view virtual override(IERC20Permit, NoncesUpgradeable) returns (uint256) {
+    function nonces(
+        address owner
+    )
+        public
+        view
+        virtual
+        override(IERC20Permit, NoncesUpgradeable)
+        returns (uint256)
+    {
         return super.nonces(owner);
     }
 

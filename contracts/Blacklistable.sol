@@ -6,7 +6,10 @@ pragma solidity ^0.8.20;
 import "./openzeppelin/InternalERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 
-contract Blacklistable is AccessControlDefaultAdminRulesUpgradeable, InternalERC20Upgradeable {
+contract Blacklistable is
+    AccessControlDefaultAdminRulesUpgradeable,
+    InternalERC20Upgradeable
+{
     event Blacklisted(address indexed account);
     event Unblacklisted(address indexed account);
 
