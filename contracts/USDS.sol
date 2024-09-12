@@ -10,7 +10,7 @@ import {ERC20PermitUpgradeable} from "./openzeppelin/ERC20PermitUpgradeable.sol"
 import "./Blacklistable.sol";
 
 /// @custom:security-contact support@bitgo.com
-contract GoUSD is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
+contract USDS is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20PermitUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
@@ -41,10 +41,10 @@ contract GoUSD is Initializable, Blacklistable, ERC20PausableUpgradeable, ERC20P
         address withdrawer,
         address[] memory _reserveAddresses
     ) public initializer {
-        __ERC20_init("GoUSD", "GOUSD");
+        __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
         __AccessControl_init();
-        __ERC20Permit_init("GoUSD");
+        __ERC20Permit_init("USDS");
         __UUPSUpgradeable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(BLACKLISTER_ROLE, blacklister);
