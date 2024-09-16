@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -9,6 +8,7 @@ import {ERC20PausableUpgradeable} from "./openzeppelin/ERC20PausableUpgradeable.
 import {ERC20PermitUpgradeable} from "./openzeppelin/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
+/// @title Offcial USDS ERC-20 Implementation
 /// @custom:security-contact support@bitgo.com
 contract USDS is
     Initializable,
@@ -38,6 +38,16 @@ contract USDS is
         _disableInitializers();
     }
 
+    /**
+     * @dev Initializes the USDS contract.
+     * @param defaultAdmin The address of the default admin.
+     * @param freezer The address of the freezer role.
+     * @param supplyController The address of the supply controller role.
+     * @param upgrader The address of the upgrader role.
+     * @param blacklister The address of the blacklister role.
+     * @param withdrawer The address of the withdrawer role.
+     * @param _reserveAddresses An array of reserve addresses.
+     */
     function initialize(
         address defaultAdmin,
         address freezer,
@@ -64,6 +74,9 @@ contract USDS is
         }
     }
 
+    /**
+     * @dev Returns the number of decimals used by the token.
+     */
     function decimals()
         public
         view
@@ -74,14 +87,24 @@ contract USDS is
         return 6;
     }
 
+    /**
+     * @dev Pauses all token transfers.
+     */
     function pause() public onlyRole(FREEZER_ROLE) {
         _pause();
     }
 
+    /**
+     * @dev Unpauses all token transfers.
+     */
     function unpause() public onlyRole(FREEZER_ROLE) {
         _unpause();
     }
 
+    /**
+     * @dev Adds a reserve address.
+     * @param newAddress The address to be added as a reserve address.
+     */
     function addReserveAddress(
         address newAddress
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -89,6 +112,10 @@ contract USDS is
         emit ReserveAddressAdded(newAddress);
     }
 
+    /**
+     * @dev Removes a reserve address.
+     * @param oldAddress The address to be removed from the reserve addresses.
+     */
     function removeReserveAddress(
         address oldAddress
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -96,10 +123,20 @@ contract USDS is
         emit ReserveAddressRemoved(oldAddress);
     }
 
+    /**
+     * @dev Checks if an address is a reserve address.
+     * @param account The address to be checked.
+     * @return A boolean indicating whether the address is a reserve address or not.
+     */
     function isReserveAddress(address account) public view returns (bool) {
         return reserveAddresses[account];
     }
 
+    /**
+     * @dev Mints new tokens and assigns them to a reserve address.
+     * @param to The address to which the new tokens will be minted.
+     * @param amount The amount of tokens to be minted.
+     */
     function mint(
         address to,
         uint256 amount
@@ -109,6 +146,11 @@ contract USDS is
         emit Mint(to, amount);
     }
 
+    /**
+     * @dev Burns tokens from the recserve address.
+     * @param from The address from which the tokens will be burned.
+     * @param amount The amount of tokens to be burned.
+     */
     function burn(
         address from,
         uint256 amount
@@ -118,6 +160,12 @@ contract USDS is
         emit Burn(from, amount);
     }
 
+    /**
+     * @dev Withdraws tokens from the contract and transfers them to the recipient.
+     * @param token The address of the token to be withdrawn.
+     * @param recipient The address to which the tokens will be transferred.
+     * @param amount The amount of tokens to be withdrawn.
+     */
     function withdraw(
         IERC20 token,
         address recipient,
@@ -126,12 +174,22 @@ contract USDS is
         token.safeTransfer(recipient, amount);
     }
 
+    /**
+     * @dev Authorizes the upgrade to a new implementation contract.
+     * @param newImplementation The address of the new implementation contract.
+     */
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyRole(UPGRADER_ROLE) {}
 
     // The following functions are overrides required by Solidity.
 
+    /**
+     * @dev Updates the balance of the specified addresses and emits the corresponding events.
+     * @param from The address from which tokens are transferred.
+     * @param to The address to which tokens are transferred.
+     * @param value The amount of tokens transferred.
+     */
     function _update(
         address from,
         address to,
@@ -147,6 +205,11 @@ contract USDS is
         ERC20PausableUpgradeable._update(from, to, value);
     }
 
+    /**
+     * @dev Returns the balance of the specified account.
+     * @param account The address to check the balance of.
+     * @return The balance of the specified account.
+     */
     function balanceOf(
         address account
     )
