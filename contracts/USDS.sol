@@ -4,8 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20PausableUpgradeable} from "./openzeppelin/ERC20PausableUpgradeable.sol";
-import {ERC20PermitUpgradeable} from "./openzeppelin/ERC20PermitUpgradeable.sol";
+import {ERC20PausableUpgradeable} from 
+    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {ERC20PermitUpgradeable} from 
+    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Offcial USDS ERC-20 Implementation
@@ -81,7 +83,7 @@ contract USDS is
         public
         view
         virtual
-        override(InternalERC20Upgradeable)
+        override(ERC20Upgradeable)
         returns (uint8)
     {
         return 6;
@@ -196,11 +198,7 @@ contract USDS is
         uint256 value
     )
         internal
-        override(
-            Blacklistable,
-            InternalERC20Upgradeable,
-            ERC20PausableUpgradeable
-        )
+        override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
     {
         ERC20PausableUpgradeable._update(from, to, value);
     }
@@ -216,7 +214,7 @@ contract USDS is
         public
         view
         virtual
-        override(Blacklistable, InternalERC20Upgradeable)
+        override(Blacklistable, ERC20Upgradeable)
         returns (uint256)
     {
         return Blacklistable.balanceOf(account);

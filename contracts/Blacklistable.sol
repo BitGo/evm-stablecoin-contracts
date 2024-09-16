@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
-// Inspired by USDC v2.2
 pragma solidity ^0.8.20;
 
-import "./openzeppelin/InternalERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 
 /**
@@ -12,10 +11,24 @@ import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefau
  */
 contract Blacklistable is
     AccessControlDefaultAdminRulesUpgradeable,
-    InternalERC20Upgradeable
+    ERC20Upgradeable
 {
     event Blacklisted(address indexed account);
     event Unblacklisted(address indexed account);
+
+   // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant ERC20StorageLocation =
+        0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
+
+    /**
+     * @dev Retrieves the storage location of the ERC20 contract.
+     * @return $ The storage location of the ERC20 contract.
+     */
+    function getERC20Storage() private pure returns (ERC20Storage storage $) {
+        assembly {
+            $.slot := ERC20StorageLocation
+        }
+    }
 
     /**
      * @dev Checks if an account is blacklisted.
@@ -23,7 +36,7 @@ contract Blacklistable is
      * @return A boolean indicating whether the account is blacklisted or not.
      */
     function isBlacklisted(address account) public view returns (bool) {
-        ERC20Storage storage $ = _getERC20Storage();
+        ERC20Storage storage $ = getERC20Storage();
         return ($._balances[account] >> 255) == 1;
     }
 
@@ -33,7 +46,7 @@ contract Blacklistable is
      * @param state The blacklist state to set.
      */
     function _setBlacklistState(address account, bool state) internal {
-        ERC20Storage storage $ = _getERC20Storage();
+        ERC20Storage storage $ = getERC20Storage();
         if (state) {
             $._balances[account] = $._balances[account] | (1 << 255);
             emit Blacklisted(account);
@@ -65,7 +78,7 @@ contract Blacklistable is
      * @return The balance of the account.
      */
     function balanceOf(address account) public view virtual override returns (uint256) {
-        ERC20Storage storage $ = _getERC20Storage();
+        ERC20Storage storage $ = getERC20Storage();
         return $._balances[account] & ((1 << 255) - 1);
     }
 
@@ -82,7 +95,7 @@ contract Blacklistable is
             "ERC20: sender is blacklisted"
         );
 
-        ERC20Storage storage $ = _getERC20Storage();
+        ERC20Storage storage $ = getERC20Storage();
         if (from == address(0)) {
             // Overflow check required: The rest of the code assumes that totalSupply never overflows
             $._totalSupply += value;
