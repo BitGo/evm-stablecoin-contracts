@@ -8,7 +8,7 @@
     "lint": "eslint . && hardhat check"
   },
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "dotenv": "^16.4.5"
   },
