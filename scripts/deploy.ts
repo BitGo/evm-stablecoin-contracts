@@ -1,4 +1,4 @@
-import { ethers, upgrades, run } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 
 async function main() {
   const ContractFactory = await ethers.getContractFactory("USDS");

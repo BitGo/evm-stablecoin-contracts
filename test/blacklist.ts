@@ -56,7 +56,6 @@ describe("USDS blacklist", function () {
   });
 
   it("Should not allow non-blacklister to blacklist", async function () {
-    const failed = false;
     try {
       await contractInstance.connect(defaultAdmin).blacklist(targetAccount.address);
     } catch (error) {
@@ -68,7 +67,6 @@ describe("USDS blacklist", function () {
 
   it("Should not allow non-blacklister to unblacklist", async function () {
     await contractInstance.connect(blacklister).blacklist(targetAccount.address);
-    const failed = false;
     try {
       await contractInstance.connect(defaultAdmin).unblacklist(targetAccount.address);
     } catch (error) {

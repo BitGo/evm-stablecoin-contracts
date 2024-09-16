@@ -33,7 +33,6 @@ describe("USDS pause", function () {
   });
 
   it("Should not be able to pause as unauthorized address", async function () {
-    const failed = false;
     try {
       await contractInstance.connect(defaultAdmin).pause();
     } catch (error) {
@@ -42,7 +41,7 @@ describe("USDS pause", function () {
 
     const paused = await contractInstance.paused();
     expect(paused).to.be.false;
-  }),
+  });
 
   it("Should pause the token successfully by freezer", async function () {
     // Freezer pauses the token
