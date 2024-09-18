@@ -121,4 +121,23 @@ describe("USDS blacklist", function () {
     expect(senderBalance).to.equal(250);
     expect(receiverBalance).to.equal(750);
   });
+
+  it("Should prevent mints to a blacklisted address", async function () {
+    // Blacklist the target account
+    await contractInstance.connect(blacklister).blacklist(targetAccount.address);
+    const balance = await contractInstance.balanceOf(targetAccount.address);
+  
+    // Attempt to mint tokens to the blacklisted address
+    try {
+      await contractInstance.connect(supplyController).mint(targetAccount.address, 100);
+    } catch (error) {
+      expect(error).to.be.an('error');
+    }
+  
+    // Check the balance of the blacklisted address
+    const newBalance = await contractInstance.balanceOf(targetAccount.address);
+    expect(balance).to.equal(newBalance);
+  });
+
+
 });
