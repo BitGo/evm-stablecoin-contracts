@@ -143,7 +143,7 @@ contract USDS is
         address to,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(reserveAddresses[to], "Address is not a reserve address");
+        require(!isBlacklisted(to), "Address to mint is blacklisted");
         _mint(to, amount);
         emit Mint(to, amount);
     }

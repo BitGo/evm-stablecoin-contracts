@@ -15,6 +15,7 @@ describe("USDS Minting and Burning", function () {
   let blacklister: SignerWithAddress;
   let withdrawer: SignerWithAddress
   let recoverAddress: SignerWithAddress;
+  let randomAddress: SignerWithAddress;
 
   before(async function () {
     [
@@ -28,6 +29,7 @@ describe("USDS Minting and Burning", function () {
       reserve3,
       withdrawer,
       recoverAddress,
+      randomAddress
     ] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("USDS");
     const contract = await upgrades.deployProxy(
@@ -61,10 +63,10 @@ describe("USDS Minting and Burning", function () {
     expect(isReserve2).to.be.true;
   });
   
-  it("Should mint tokens successfully to reserve1", async function () {
+  it("Should mint tokens successfully to any external address", async function () {
     const mintAmount = ethers.parseUnits("1000", 18);
-    await contractInstance.connect(supplyController).mint(reserve1.address, mintAmount);
-    const balance = await contractInstance.balanceOf(reserve1.address);
+    await contractInstance.connect(supplyController).mint(randomAddress.address, mintAmount);
+    const balance = await contractInstance.balanceOf(randomAddress.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
   });
@@ -90,26 +92,14 @@ describe("USDS Minting and Burning", function () {
   });
 
   it("Should burn tokens successfully from reserve1", async function () {
+    const burnAmount = ethers.parseUnits("500", 18);
+    await contractInstance.connect(supplyController).mint(reserve1.address, burnAmount);
     const totalSupply = await contractInstance.totalSupply();
     const initialBalance = await contractInstance.balanceOf(reserve1.address);
-    const burnAmount = ethers.parseUnits("500", 18);
     await contractInstance.connect(supplyController).burn(reserve1.address, burnAmount);
     const finalBalance = await contractInstance.balanceOf(reserve1.address);
     expect(finalBalance).to.equal(initialBalance - burnAmount);
     expect(await contractInstance.totalSupply()).to.equal(totalSupply - burnAmount);
-  });
-
-  it("Should fail to mint tokens to a non-reserve address", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
-    let failed = false;
-    try {
-      // Attempt to mint tokens to a non-reserve address (e.g., freezer)
-      await contractInstance.connect(supplyController).mint(freezer.address, mintAmount);
-    } catch (error) {
-      failed = true;
-      expect(error).to.be.an('error');
-    }
-    expect(failed).to.be.true;
   });
   
   it("Should fail to burn tokens from a non-reserve address", async function () {
