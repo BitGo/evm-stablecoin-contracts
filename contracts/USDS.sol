@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20PausableUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import {ERC20PermitUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {ERC20PausableUpgradeable} 
+    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {ERC20PermitUpgradeable} 
+    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Offcial USDS ERC-20 Implementation
@@ -135,6 +135,49 @@ contract USDS is
     }
 
     /**
+     * @dev Transfers `amount` tokens from `sender` to `recipient` using the allowance mechanism.
+     * `amount` is then deducted from the caller's allowance.
+     * @param from The address to transfer tokens from.
+     * @param to The address to transfer tokens to.
+     * @param value The amount of tokens to transfer.
+     * Emits a {Transfer} event.
+     */
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) public virtual override returns (bool) {
+        address spender = _msgSender();
+        require(
+            !isBlacklisted(from),
+            "Address to transfer from is blacklisted"
+        );
+        _spendAllowance(from, spender, value);
+        _transfer(from, to, value);
+        return true;
+    }
+
+    /**
+     * @dev Transfers tokens from the caller's account to another account.
+     * @param to The address to transfer tokens to.
+     * @param value The amount of tokens to transfer.
+     * @return A boolean value indicating whether the transfer was successful or not.
+     */
+    function transfer(
+        address to,
+        uint256 value
+    ) public virtual override returns (bool) {
+        address owner = _msgSender();
+        require(
+            !isBlacklisted(owner),
+            "Address to transfer from is blacklisted"
+        );
+        _transfer(owner, to, value);
+        return true;
+    }
+
+    /**
      * @dev Mints new tokens and assigns them to a reserve address.
      * @param to The address to which the new tokens will be minted.
      * @param amount The amount of tokens to be minted.
@@ -157,9 +200,23 @@ contract USDS is
         address from,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+        require(!isBlacklisted(from), "Address to burn is blacklisted");
         require(reserveAddresses[from], "Address is not a reserve address");
         _burn(from, amount);
         emit Burn(from, amount);
+    }
+
+    /**
+     * @dev Destroys blacklisted funds.
+     * @param account The address of the account with blacklisted funds.
+     */
+    function destroyBlacklistedFunds(
+        address account
+    ) public onlyRole(BLACKLISTER_ROLE) {
+        require(isBlacklisted(account), "Address is not blacklisted");
+        uint256 balance = balanceOf(account);
+        _burn(account, balance);
+        emit Burn(account, balance);
     }
 
     /**
@@ -173,6 +230,7 @@ contract USDS is
         address recipient,
         uint256 amount
     ) public onlyRole(WITHDRAWER_ROLE) {
+        require(!isBlacklisted(recipient), "Recipient is blacklisted");
         token.safeTransfer(recipient, amount);
     }
 

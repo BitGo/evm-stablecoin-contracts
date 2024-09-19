@@ -16,7 +16,7 @@ contract Blacklistable is
     event Blacklisted(address indexed account);
     event Unblacklisted(address indexed account);
 
-   // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant ERC20StorageLocation =
         0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
 
@@ -60,7 +60,9 @@ contract Blacklistable is
      * @dev Blacklists an account.
      * @param account The address to blacklist.
      */
-    function blacklist(address account) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    function blacklist(
+        address account
+    ) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
         _setBlacklistState(account, true);
     }
 
@@ -68,7 +70,9 @@ contract Blacklistable is
      * @dev Unblacklists an account.
      * @param account The address to unblacklist.
      */
-    function unblacklist(address account) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    function unblacklist(
+        address account
+    ) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
         _setBlacklistState(account, false);
     }
 
@@ -77,7 +81,9 @@ contract Blacklistable is
      * @param account The address to fetch the balance for.
      * @return The balance of the account.
      */
-    function balanceOf(address account) public view virtual override returns (uint256) {
+    function balanceOf(
+        address account
+    ) public view virtual override returns (uint256) {
         ERC20Storage storage $ = getERC20Storage();
         return $._balances[account] & ((1 << 255) - 1);
     }
@@ -88,13 +94,11 @@ contract Blacklistable is
      * @param to The address to transfer to.
      * @param value The amount to transfer.
      */
-    function _update(address from, address to, uint256 value) internal virtual override {
-        // Check if the sender is blacklisted, unless it's a minting operation (from == address(0))
-        require(
-            from == address(0) || !isBlacklisted(from),
-            "ERC20: sender is blacklisted"
-        );
-
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual override {
         ERC20Storage storage $ = getERC20Storage();
         if (from == address(0)) {
             // Overflow check required: The rest of the code assumes that totalSupply never overflows

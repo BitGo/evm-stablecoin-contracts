@@ -5,12 +5,16 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
-    "lint": "eslint . && hardhat check"
+    "lint": "eslint . && hardhat check",
+    "format": "prettier --write --plugin=prettier-plugin-solidity 'contracts/*.sol'"
   },
-  "author": "",
+  "author": "BitGo",
   "license": "Apache-2.0",
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "@openzeppelin/contracts": "^5.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.0"
   },
   "devDependencies": {
     "@eslint/compat": "^1.1.1",
@@ -19,13 +23,12 @@
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^2.0.8",
     "@nomiclabs/hardhat-solhint": "^4.0.1",
-    "@openzeppelin/contracts": "^5.0.0",
-    "@openzeppelin/contracts-upgradeable": "^5.0.0",
-    "@openzeppelin/hardhat-upgrades": "^3.0.0",
     "@types/eslint__js": "^8.42.3",
     "eslint": "^9.10.0",
     "eslint-plugin-chai-friendly": "^1.0.1",
     "hardhat": "^2.22.6",
+    "prettier": "^3.3.3",
+    "prettier-plugin-solidity": "^1.4.1",
     "typescript": "^5.6.2",
     "typescript-cached-transpile": "^0.0.6",
     "typescript-eslint": "^8.5.0"
