@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20PausableUpgradeable} 
-    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import {ERC20PermitUpgradeable} 
-    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {ERC20PausableUpgradeable} from 
+    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {ERC20PermitUpgradeable} from 
+    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Offcial USDS ERC-20 Implementation
@@ -26,7 +26,7 @@ contract USDS is
     bytes32 public constant SUPPLY_CONTROLLER_ROLE =
         keccak256("SUPPLY_CONTROLLER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
+    bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
     mapping(address => bool) public reserveAddresses;
 
@@ -47,7 +47,7 @@ contract USDS is
      * @param supplyController The address of the supply controller role.
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
-     * @param withdrawer The address of the withdrawer role.
+     * @param resuer The address of the resuer role.
      * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
@@ -56,7 +56,7 @@ contract USDS is
         address supplyController,
         address upgrader,
         address blacklister,
-        address withdrawer,
+        address resuer,
         address[] memory _reserveAddresses
     ) public initializer {
         __ERC20_init("USDS", "USDS");
@@ -69,24 +69,11 @@ contract USDS is
         _grantRole(FREEZER_ROLE, freezer);
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
-        _grantRole(WITHDRAWER_ROLE, withdrawer);
+        _grantRole(RESCUER_ROLE, resuer);
         for (uint256 i = 0; i < _reserveAddresses.length; i++) {
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
         }
-    }
-
-    /**
-     * @dev Returns the number of decimals used by the token.
-     */
-    function decimals()
-        public
-        view
-        virtual
-        override(ERC20Upgradeable)
-        returns (uint8)
-    {
-        return 6;
     }
 
     /**
@@ -123,15 +110,6 @@ contract USDS is
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         reserveAddresses[oldAddress] = false;
         emit ReserveAddressRemoved(oldAddress);
-    }
-
-    /**
-     * @dev Checks if an address is a reserve address.
-     * @param account The address to be checked.
-     * @return A boolean indicating whether the address is a reserve address or not.
-     */
-    function isReserveAddress(address account) public view returns (bool) {
-        return reserveAddresses[account];
     }
 
     /**
@@ -225,40 +203,35 @@ contract USDS is
      * @param recipient The address to which the tokens will be transferred.
      * @param amount The amount of tokens to be withdrawn.
      */
-    function withdraw(
+    function rescueTokens(
         IERC20 token,
         address recipient,
         uint256 amount
-    ) public onlyRole(WITHDRAWER_ROLE) {
+    ) public onlyRole(RESCUER_ROLE) {
         require(!isBlacklisted(recipient), "Recipient is blacklisted");
         token.safeTransfer(recipient, amount);
     }
 
     /**
-     * @dev Authorizes the upgrade to a new implementation contract.
-     * @param newImplementation The address of the new implementation contract.
+     * @dev Returns the number of decimals used by the token.
      */
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {}
-
-    // The following functions are overrides required by Solidity.
+    function decimals()
+        public
+        view
+        virtual
+        override(ERC20Upgradeable)
+        returns (uint8)
+    {
+        return 6;
+    }
 
     /**
-     * @dev Updates the balance of the specified addresses and emits the corresponding events.
-     * @param from The address from which tokens are transferred.
-     * @param to The address to which tokens are transferred.
-     * @param value The amount of tokens transferred.
+     * @dev Checks if an address is a reserve address.
+     * @param account The address to be checked.
+     * @return A boolean indicating whether the address is a reserve address or not.
      */
-    function _update(
-        address from,
-        address to,
-        uint256 value
-    )
-        internal
-        override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
-    {
-        ERC20PausableUpgradeable._update(from, to, value);
+    function isReserveAddress(address account) public view returns (bool) {
+        return reserveAddresses[account];
     }
 
     /**
@@ -276,5 +249,30 @@ contract USDS is
         returns (uint256)
     {
         return Blacklistable.balanceOf(account);
+    }
+
+    /**
+     * @dev Authorizes the upgrade to a new implementation contract.
+     * @param newImplementation The address of the new implementation contract.
+     */
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRole(UPGRADER_ROLE) {}
+
+    /**
+     * @dev Updates the balance of the specified addresses and emits the corresponding events.
+     * @param from The address from which tokens are transferred.
+     * @param to The address to which tokens are transferred.
+     * @param value The amount of tokens transferred.
+     */
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    )
+        internal
+        override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
+    {
+        ERC20PausableUpgradeable._update(from, to, value);
     }
 }
