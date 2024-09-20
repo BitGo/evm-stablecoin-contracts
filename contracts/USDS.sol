@@ -47,7 +47,7 @@ contract USDS is
      * @param supplyController The address of the supply controller role.
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
-     * @param resuer The address of the resuer role.
+     * @param rescuer The address of the rescuer role.
      * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
@@ -56,7 +56,7 @@ contract USDS is
         address supplyController,
         address upgrader,
         address blacklister,
-        address resuer,
+        address rescuer,
         address[] memory _reserveAddresses
     ) public initializer {
         __ERC20_init("USDS", "USDS");
@@ -69,7 +69,7 @@ contract USDS is
         _grantRole(FREEZER_ROLE, freezer);
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
-        _grantRole(RESCUER_ROLE, resuer);
+        _grantRole(RESCUER_ROLE, rescuer);
         for (uint256 i = 0; i < _reserveAddresses.length; i++) {
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
