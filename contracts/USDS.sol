@@ -26,7 +26,7 @@ contract USDS is
     bytes32 public constant SUPPLY_CONTROLLER_ROLE =
         keccak256("SUPPLY_CONTROLLER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
+    bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
     mapping(address => bool) public reserveAddresses;
 
@@ -47,7 +47,7 @@ contract USDS is
      * @param supplyController The address of the supply controller role.
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
-     * @param withdrawer The address of the withdrawer role.
+     * @param resuer The address of the resuer role.
      * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
@@ -56,7 +56,7 @@ contract USDS is
         address supplyController,
         address upgrader,
         address blacklister,
-        address withdrawer,
+        address resuer,
         address[] memory _reserveAddresses
     ) public initializer {
         __ERC20_init("USDS", "USDS");
@@ -69,7 +69,7 @@ contract USDS is
         _grantRole(FREEZER_ROLE, freezer);
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
-        _grantRole(WITHDRAWER_ROLE, withdrawer);
+        _grantRole(RESCUER_ROLE, resuer);
         for (uint256 i = 0; i < _reserveAddresses.length; i++) {
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
@@ -203,11 +203,11 @@ contract USDS is
      * @param recipient The address to which the tokens will be transferred.
      * @param amount The amount of tokens to be withdrawn.
      */
-    function withdraw(
+    function rescueTokens(
         IERC20 token,
         address recipient,
         uint256 amount
-    ) public onlyRole(WITHDRAWER_ROLE) {
+    ) public onlyRole(RESCUER_ROLE) {
         require(!isBlacklisted(recipient), "Recipient is blacklisted");
         token.safeTransfer(recipient, amount);
     }

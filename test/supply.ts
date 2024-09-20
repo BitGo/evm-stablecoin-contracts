@@ -13,7 +13,7 @@ describe("USDS Minting and Burning", function () {
   let reserve2: SignerWithAddress;
   let reserve3: SignerWithAddress;
   let blacklister: SignerWithAddress;
-  let withdrawer: SignerWithAddress
+  let rescuer: SignerWithAddress
   let recoverAddress: SignerWithAddress;
   let randomAddress: SignerWithAddress;
 
@@ -27,7 +27,7 @@ describe("USDS Minting and Burning", function () {
       reserve1,
       reserve2,
       reserve3,
-      withdrawer,
+      rescuer,
       recoverAddress,
       randomAddress
     ] = await ethers.getSigners();
@@ -40,7 +40,7 @@ describe("USDS Minting and Burning", function () {
         supplyController.address,
         upgrader.address,
         blacklister.address,
-        withdrawer.address,
+        rescuer.address,
         [reserve1.address, reserve2.address, reserve3.address],
       ],
       { kind: "uups" }
@@ -71,7 +71,7 @@ describe("USDS Minting and Burning", function () {
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
   });
 
-  it("Should be able to recover missend address", async function () {
+  it("Should be able to recover tokens stuck in contract address", async function () {
     const transferAmount = ethers.parseUnits("1000", 18);
     await contractInstance.connect(supplyController).mint(reserve3.address, transferAmount);
     const balanceAfterTransfer = await contractInstance.balanceOf(reserve3.address);
@@ -84,7 +84,7 @@ describe("USDS Minting and Burning", function () {
     expect(balance).to.equal(transferAmount);
  
     // Recover the tokens
-    await contractInstance.connect(withdrawer).withdraw(contractInstance.getAddress(), recoverAddress.address, transferAmount);
+    await contractInstance.connect(rescuer).rescueTokens(contractInstance.getAddress(), recoverAddress.address, transferAmount);
     const newTokenContractBalance = await contractInstance.balanceOf(contractInstance.getAddress());
     expect(newTokenContractBalance).to.equal( ethers.parseUnits("0", 18));
     const balanceAtRecoverAddress = await contractInstance.balanceOf(recoverAddress.address);
