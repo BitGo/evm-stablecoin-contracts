@@ -4,10 +4,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20PausableUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import {ERC20PermitUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {AggregatorV3Interface}
+    from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {ERC20PausableUpgradeable}
+    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {ERC20PermitUpgradeable}
+    from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Offcial USDS ERC-20 Implementation
@@ -21,6 +23,8 @@ contract USDS is
 {
     using SafeERC20 for IERC20;
 
+    AggregatorV3Interface private proofOfReserveFeed;
+
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
     bytes32 public constant SUPPLY_CONTROLLER_ROLE =
@@ -30,10 +34,11 @@ contract USDS is
 
     mapping(address => bool) public reserveAddresses;
 
+    event Burn(address indexed from, uint256 amount);
+    event Mint(address indexed to, uint256 amount);
     event ReserveAddressAdded(address indexed newAddress);
     event ReserveAddressRemoved(address indexed oldAddress);
-    event Mint(address indexed to, uint256 amount);
-    event Burn(address indexed from, uint256 amount);
+    event ProofOfReserveFeedSet(address newFeed);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -49,6 +54,7 @@ contract USDS is
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
      * @param _reserveAddresses An array of reserve addresses.
+     * @param _proofOfReserveAddress An array of reserve addresses.
      */
     function initialize(
         address defaultAdmin,
@@ -57,7 +63,8 @@ contract USDS is
         address upgrader,
         address blacklister,
         address rescuer,
-        address[] memory _reserveAddresses
+        address[] memory _reserveAddresses,
+        address _proofOfReserveAddress
     ) public initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
@@ -74,6 +81,7 @@ contract USDS is
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
         }
+        proofOfReserveFeed = AggregatorV3Interface(_proofOfReserveAddress);
     }
 
     /**
@@ -165,6 +173,16 @@ contract USDS is
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(!isBlacklisted(to), "Address to mint is blacklisted");
+
+        uint256 totalSupply = totalSupply();
+        uint256 reserves = getLatestReserve();
+
+        require(reserves > 0, "Invalid data from PoR feed");
+        require(
+            totalSupply + amount <= reserves,
+            "Total supply + requested mint amount exceeds available reserves"
+        );
+
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -274,5 +292,28 @@ contract USDS is
         override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
     {
         ERC20PausableUpgradeable._update(from, to, value);
+    }
+
+    function setProofOfReserveFeed(
+        address _newFeed
+    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
+        proofOfReserveFeed = AggregatorV3Interface(_newFeed);
+        emit ProofOfReserveFeedSet(_newFeed);
+    }
+
+    function getProofOfReserveFeed() external view returns (address) {
+        return address(proofOfReserveFeed);
+    }
+
+    function getLatestReserve() public view returns (uint256) {
+        (
+            /* uint80 roundID */,
+            int reserve
+            /* uint startedAt */,
+            /* uint timeStamp */,
+            /* uint80 answeredInRound */,
+        ) = proofOfReserveFeed.latestRoundData();
+
+        return uint256(reserve);
     }
 }
