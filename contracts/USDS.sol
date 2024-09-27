@@ -190,7 +190,7 @@ contract USDS is
      */
     function destroyBlacklistedFunds(
         address account
-    ) public onlyRole(BLACKLISTER_ROLE) {
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(isBlacklisted(account), "Address is not blacklisted");
         uint256 balance = balanceOf(account);
         _burn(account, balance);
