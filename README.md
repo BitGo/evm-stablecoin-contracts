@@ -7,6 +7,7 @@ Roles:
 - supplyController: can mint and burn tokens
 - freezer: can pause/unpause contracts
 - blacklister: can freeze addresses
+- rescuer: can rescue stuck tokens from the contract
 
 ## Installing dependencies
 
@@ -31,6 +32,7 @@ SUPPLY_CONTROLLER_ADDRESS=<...>
 UPGRADER_ADDRESS=<...>
 ADMIN_ADDRESS=<...>
 BLACKLISTER_ADDRESS=<...>
+RESCUER_ADDRESS=<...>
 RESERVE_ADDRESSES=<...,...,...>
 ```
 You can target any network from your Hardhat config using:
