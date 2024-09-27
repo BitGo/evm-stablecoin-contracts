@@ -122,14 +122,14 @@ describe("USDS blacklist", function () {
     expect(receiverBalance).to.equal(750);
   });
 
-  it("Should allow blacklist role to destroy blacklisted funds", async function () {
+  it("Should allow supply controller role to destroy blacklisted funds", async function () {
     // Blacklist receiver
     await contractInstance.connect(blacklister).blacklist(targetAccount.address);
     const targetBalance = await contractInstance.balanceOf(targetAccount.address);
     expect(targetBalance).to.equal(750);
     
     // Destroy blacklisted funds
-    await contractInstance.connect(blacklister).destroyBlacklistedFunds(targetAccount.address);
+    await contractInstance.connect(supplyController).destroyBlacklistedFunds(targetAccount.address);
     const targetBalanceAfter = await contractInstance.balanceOf(targetAccount.address);
     expect(targetBalanceAfter).to.equal(0);
   });
