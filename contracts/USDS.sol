@@ -54,7 +54,7 @@ contract USDS is
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
      * @param _reserveAddresses An array of reserve addresses.
-     * @param _proofOfReserveAddress An array of reserve addresses.
+     * @param _proofOfReserveAddress The address of the PoR feed.
      */
     function initialize(
         address defaultAdmin,
@@ -64,7 +64,7 @@ contract USDS is
         address blacklister,
         address rescuer,
         address[] memory _reserveAddresses,
-        address _proofOfReserveAddress
+        address proofOfReserveAddress
     ) public initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
@@ -81,7 +81,7 @@ contract USDS is
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
         }
-        proofOfReserveFeed = AggregatorV3Interface(_proofOfReserveAddress);
+        proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
     }
 
     /**
