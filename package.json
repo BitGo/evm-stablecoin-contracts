@@ -11,10 +11,11 @@
   "author": "BitGo",
   "license": "Apache-2.0",
   "dependencies": {
-    "dotenv": "^16.4.5",
+    "@chainlink/contracts": "^1.2.0",
     "@openzeppelin/contracts": "^5.0.0",
     "@openzeppelin/contracts-upgradeable": "^5.0.0",
-    "@openzeppelin/hardhat-upgrades": "^3.0.0"
+    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@eslint/compat": "^1.1.1",

@@ -1,10 +1,11 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { USDS } from "../typechain-types";
+import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS pause", function () {
   let contractInstance: USDS;
+  let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
@@ -16,6 +17,14 @@ describe("USDS pause", function () {
   before(async function () {
     [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, withdrawer] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("USDS");
+    const dummyAggregator = await ethers.getContractFactory("DummyAggregatorV3");
+    const dummyAggregatorContract = await dummyAggregator.deploy(
+      6, // Decimals
+      "Dummy contract description",
+      1 // version
+    );
+    dummyAggregatorInstance = (await dummyAggregatorContract.waitForDeployment()) as DummyAggregatorV3;
+    const dummyAggregatorAddress = await dummyAggregatorInstance.getAddress();
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -25,6 +34,7 @@ describe("USDS pause", function () {
         upgrader.address,
         blacklister.address,
         withdrawer.address,
+        dummyAggregatorAddress,
         [reserve.address],
       ],
       { kind: "uups" }

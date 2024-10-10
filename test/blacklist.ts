@@ -1,10 +1,11 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { USDS } from "../typechain-types";
+import { USDS, DummyAggregatorV3 } from "../typechain-types";
 
 describe("USDS blacklist", function () {
   let contractInstance: USDS;
+  let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress
   let supplyController: SignerWithAddress;
@@ -17,6 +18,15 @@ describe("USDS blacklist", function () {
   before(async function () {
     [defaultAdmin, freezer, supplyController, upgrader, blacklister, reserve, withdrawer, targetAccount] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("USDS");
+    const dummyAggregator = await ethers.getContractFactory("DummyAggregatorV3");
+    const dummyAggregatorContract = await dummyAggregator.deploy(
+      6, // Decimals
+      "Dummy contract description",
+      1 // version
+    );
+    dummyAggregatorInstance = (await dummyAggregatorContract.waitForDeployment()) as DummyAggregatorV3;
+    const dummyAggregatorAddress = await dummyAggregatorInstance.getAddress();
+
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -26,14 +36,17 @@ describe("USDS blacklist", function () {
         upgrader.address,
         blacklister.address,
         withdrawer.address,
+        dummyAggregatorAddress,
         [reserve.address],
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
-
+    contractInstance = (await contract.waitForDeployment()) as unknown as USDS; 
+    const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
+    await dummyAggregatorInstance.connect(supplyController).updateData(1000000, 1, timeStampInSeconds, 1);
+       
     // Mint tokens to reserve
-    await contractInstance.connect(supplyController).mint(reserve.address, 1000);
+    await contractInstance.connect(supplyController).mint(reserve.address, 1000);    
   });
 
   beforeEach(async function () {
