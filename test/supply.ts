@@ -1,21 +1,23 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { USDS } from "../typechain-types";
+import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS Minting and Burning", function () {
   let contractInstance: USDS;
+  let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
-  let freezer: SignerWithAddress
+  let freezer: SignerWithAddress;
   let supplyController: SignerWithAddress;
   let upgrader: SignerWithAddress;
   let reserve1: SignerWithAddress;
   let reserve2: SignerWithAddress;
   let reserve3: SignerWithAddress;
   let blacklister: SignerWithAddress;
-  let rescuer: SignerWithAddress
+  let rescuer: SignerWithAddress;
   let recoverAddress: SignerWithAddress;
   let randomAddress: SignerWithAddress;
+  const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
 
   before(async function () {
     [
@@ -29,9 +31,19 @@ describe("USDS Minting and Burning", function () {
       reserve3,
       rescuer,
       recoverAddress,
-      randomAddress
+      randomAddress,
     ] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("USDS");
+    const dummyAggregator =
+      await ethers.getContractFactory("DummyAggregatorV3");
+    const dummyAggregatorContract = await dummyAggregator.deploy(
+      6, // Decimals
+      "Dummy contract description",
+      1 // version
+    );
+    dummyAggregatorInstance =
+      (await dummyAggregatorContract.waitForDeployment()) as DummyAggregatorV3;
+    const dummyAggregatorAddress = await dummyAggregatorInstance.getAddress();
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -41,6 +53,7 @@ describe("USDS Minting and Burning", function () {
         upgrader.address,
         blacklister.address,
         rescuer.address,
+        dummyAggregatorAddress,
         [reserve1.address, reserve2.address, reserve3.address],
       ],
       { kind: "uups" }
@@ -56,16 +69,25 @@ describe("USDS Minting and Burning", function () {
   });
 
   it("Should correctly identify reserve addresses", async function () {
-    const isReserve1 = await contractInstance.isReserveAddress(reserve1.address);
-    const isReserve2 = await contractInstance.isReserveAddress(reserve2.address);
-  
+    const isReserve1 = await contractInstance.isReserveAddress(
+      reserve1.address
+    );
+    const isReserve2 = await contractInstance.isReserveAddress(
+      reserve2.address
+    );
+
     expect(isReserve1).to.be.true;
     expect(isReserve2).to.be.true;
   });
-  
+
   it("Should mint tokens successfully to any external address", async function () {
     const mintAmount = ethers.parseUnits("1000", 18);
-    await contractInstance.connect(supplyController).mint(randomAddress.address, mintAmount);
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(mintAmount, 1, timeStampInSeconds, 1);
+    await contractInstance
+      .connect(supplyController)
+      .mint(randomAddress.address, mintAmount);
     const balance = await contractInstance.balanceOf(randomAddress.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
@@ -73,44 +95,83 @@ describe("USDS Minting and Burning", function () {
 
   it("Should be able to recover tokens stuck in contract address", async function () {
     const transferAmount = ethers.parseUnits("1000", 18);
-    await contractInstance.connect(supplyController).mint(reserve3.address, transferAmount);
-    const balanceAfterTransfer = await contractInstance.balanceOf(reserve3.address);
+    const totalSupply = await contractInstance.totalSupply();
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply + transferAmount, 1, timeStampInSeconds, 1);
+    await contractInstance
+      .connect(supplyController)
+      .mint(reserve3.address, transferAmount);
+    const balanceAfterTransfer = await contractInstance.balanceOf(
+      reserve3.address
+    );
     expect(balanceAfterTransfer).to.equal(transferAmount);
 
     // Mint tokens to the contract itself
-   
-    await contractInstance.connect(reserve3).transfer(contractInstance.getAddress(), transferAmount);
-    const balance = await contractInstance.balanceOf(contractInstance.getAddress());
+
+    await contractInstance
+      .connect(reserve3)
+      .transfer(contractInstance.getAddress(), transferAmount);
+    const balance = await contractInstance.balanceOf(
+      contractInstance.getAddress()
+    );
     expect(balance).to.equal(transferAmount);
- 
+
     // Recover the tokens
-    await contractInstance.connect(rescuer).rescueTokens(contractInstance.getAddress(), recoverAddress.address, transferAmount);
-    const newTokenContractBalance = await contractInstance.balanceOf(contractInstance.getAddress());
-    expect(newTokenContractBalance).to.equal( ethers.parseUnits("0", 18));
-    const balanceAtRecoverAddress = await contractInstance.balanceOf(recoverAddress.address);
+    await contractInstance
+      .connect(rescuer)
+      .rescueTokens(
+        contractInstance.getAddress(),
+        recoverAddress.address,
+        transferAmount
+      );
+    const newTokenContractBalance = await contractInstance.balanceOf(
+      contractInstance.getAddress()
+    );
+    expect(newTokenContractBalance).to.equal(ethers.parseUnits("0", 18));
+    const balanceAtRecoverAddress = await contractInstance.balanceOf(
+      recoverAddress.address
+    );
     expect(balanceAtRecoverAddress).to.equal(transferAmount);
   });
 
   it("Should burn tokens successfully from reserve1", async function () {
     const burnAmount = ethers.parseUnits("500", 18);
-    await contractInstance.connect(supplyController).mint(reserve1.address, burnAmount);
-    const totalSupply = await contractInstance.totalSupply();
+    let totalSupply = await contractInstance.totalSupply();
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply + burnAmount, 1, timeStampInSeconds, 1);
+
+    await contractInstance
+      .connect(supplyController)
+      .mint(reserve1.address, burnAmount);
+    totalSupply = await contractInstance.totalSupply();
     const initialBalance = await contractInstance.balanceOf(reserve1.address);
-    await contractInstance.connect(supplyController).burn(reserve1.address, burnAmount);
+    await contractInstance
+      .connect(supplyController)
+      .burn(reserve1.address, burnAmount);
     const finalBalance = await contractInstance.balanceOf(reserve1.address);
     expect(finalBalance).to.equal(initialBalance - burnAmount);
-    expect(await contractInstance.totalSupply()).to.equal(totalSupply - burnAmount);
+    expect(await contractInstance.totalSupply()).to.equal(
+      totalSupply - burnAmount
+    );
   });
-  
+
   it("Should fail to burn tokens from a non-reserve address", async function () {
     const burnAmount = ethers.parseUnits("500", 18);
     let failed = false;
     try {
       // Attempt to burn tokens from a non-reserve address (e.g., freezer)
-      await contractInstance.connect(supplyController).burn(freezer.address, burnAmount);
+      await contractInstance
+        .connect(supplyController)
+        .burn(freezer.address, burnAmount);
     } catch (error) {
       failed = true;
-      expect(error).to.be.an('error');
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Address is not a reserve address'"
+      );
+
+      expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
   });
@@ -120,24 +181,100 @@ describe("USDS Minting and Burning", function () {
     let failed = false;
     try {
       // Attempt to mint tokens by an unauthorized signer (e.g., defaultAdmin)
-      await contractInstance.connect(defaultAdmin).mint(reserve1.address, mintAmount);
+      await contractInstance
+        .connect(defaultAdmin)
+        .mint(reserve1.address, mintAmount);
     } catch (error) {
       failed = true;
-      expect(error).to.be.an('error');
+      expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
   });
-  
+
   it("Should fail to burn tokens when called by unauthorized address", async function () {
     const burnAmount = ethers.parseUnits("500", 18);
     let failed = false;
     try {
       // Attempt to burn tokens by an unauthorized signer (e.g., defaultAdmin)
-      await contractInstance.connect(defaultAdmin).burn(reserve1.address, burnAmount);
+      await contractInstance
+        .connect(defaultAdmin)
+        .burn(reserve1.address, burnAmount);
     } catch (error) {
       failed = true;
-      expect(error).to.be.an('error');
+      expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
   });
+
+  it("Should fail to mint tokens when there is not enough reserve from the aggregator", async function () {
+    const mintAmount = ethers.parseUnits("1000", 18);
+    let failed = false;
+    const totalSupply = await contractInstance.totalSupply();
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply, 1, timeStampInSeconds, 1);
+    try {
+      // Attempt to mint tokens when there is not enough reserve from the aggregator
+      await contractInstance
+        .connect(supplyController)
+        .mint(reserve1.address, mintAmount);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Total supply + requested mint amount exceeds available reserves'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+  });
+
+  it("Should fail to mint tokens when proof of reserve feed is outdated", async function () {
+    const mintAmount = ethers.parseUnits("1000", 18);
+    let failed = false;
+    const totalSupply = await contractInstance.totalSupply();
+    // Default delay proof of reserve time delay is 3 hours
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply + mintAmount, 1, (timeStampInSeconds - 10800), 1); // Delay proof of reserve by 3 hours
+    try {
+      // Attempt to mint tokens when proof of reserve feed is more than 3 hours outdated
+      await contractInstance
+        .connect(supplyController)
+        .mint(reserve1.address, mintAmount);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Proof of reserve is out of date'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+
+    // Reset proof of reserve time delay to 4 hours
+    await contractInstance.connect(defaultAdmin).setAcceptableProofOfReserveTimeDelay(14400);
+    const proofOfReserveTimeDelay = await contractInstance.acceptableProofOfReserveTimeDelay();
+    expect(proofOfReserveTimeDelay).to.equal(14400);
+
+    // Attempt to mint tokens when proof of reserve feed is not outdated
+    const balance = await contractInstance.balanceOf(reserve1.address);
+    await contractInstance
+      .connect(supplyController)
+      .mint(reserve1.address, mintAmount);
+    const newBalance = await contractInstance.balanceOf(reserve1.address);
+    expect(newBalance).to.equal(balance + mintAmount);
+  });
+
+  it('Should be able to update the proof of reserve feed', async function () {
+    const newProofFeed = await ethers.getContractFactory('DummyAggregatorV3');
+    const newProofFeedContract = await newProofFeed.deploy(6, 'New proof feed', 1);
+    const newProofFeedAddress = await newProofFeedContract.getAddress();
+    await contractInstance.connect(defaultAdmin).setProofOfReserveFeed(newProofFeedAddress);
+    const currentProofFeed = await contractInstance.getProofOfReserveFeed();
+    expect(currentProofFeed).to.equal(newProofFeedAddress);
+    await newProofFeedContract.connect(supplyController).updateData(1234, 1, timeStampInSeconds, 1);
+    const [proofFeedData] = await contractInstance.connect(defaultAdmin).getLatestReserve();
+    expect(proofFeedData).to.equal(1234);
+  });
+
+  
 });

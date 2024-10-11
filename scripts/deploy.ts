@@ -10,14 +10,15 @@ async function main() {
     ADMIN_ADDRESS,
     BLACKLISTER_ADDRESS,
     RESERVE_ADDRESSES,
-    RESCUER_ADDRESS
+    RESCUER_ADDRESS,
+    PROOF_FEED_ADDRESS
   } = process.env;
 
   const reserveAddresses = RESERVE_ADDRESSES ? RESERVE_ADDRESSES.split(',') : [];
 
   const instance = await upgrades.deployProxy(
     ContractFactory,
-    [ADMIN_ADDRESS, FREEZER_ADDRESS, SUPPLY_CONTROLLER_ADDRESS, UPGRADER_ADDRESS, BLACKLISTER_ADDRESS, RESCUER_ADDRESS, reserveAddresses],
+    [ADMIN_ADDRESS, FREEZER_ADDRESS, SUPPLY_CONTROLLER_ADDRESS, UPGRADER_ADDRESS, BLACKLISTER_ADDRESS, RESCUER_ADDRESS,PROOF_FEED_ADDRESS, reserveAddresses],
     { 
       kind: 'uups',
       txOverrides: {

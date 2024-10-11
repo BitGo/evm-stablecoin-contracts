@@ -4,10 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20PausableUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import {ERC20PermitUpgradeable} from 
-    "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import { ERC20PausableUpgradeable } 
+        from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import { ERC20PermitUpgradeable } 
+        from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Offcial USDS ERC-20 Implementation
@@ -21,6 +22,8 @@ contract USDS is
 {
     using SafeERC20 for IERC20;
 
+    AggregatorV3Interface private proofOfReserveFeed;
+
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
     bytes32 public constant SUPPLY_CONTROLLER_ROLE =
@@ -29,11 +32,14 @@ contract USDS is
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
     mapping(address => bool) public reserveAddresses;
+    uint256 public acceptableProofOfReserveTimeDelay;
 
+    event Burn(address indexed from, uint256 amount);
+    event Mint(address indexed to, uint256 amount);
     event ReserveAddressAdded(address indexed newAddress);
     event ReserveAddressRemoved(address indexed oldAddress);
-    event Mint(address indexed to, uint256 amount);
-    event Burn(address indexed from, uint256 amount);
+    event ProofOfReserveFeedSet(address newFeed);
+    event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -48,6 +54,7 @@ contract USDS is
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
+     * @param proofOfReserveAddress The address of the PoR feed.
      * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
@@ -57,6 +64,7 @@ contract USDS is
         address upgrader,
         address blacklister,
         address rescuer,
+        address proofOfReserveAddress,
         address[] memory _reserveAddresses
     ) public initializer {
         __ERC20_init("USDS", "USDS");
@@ -74,6 +82,36 @@ contract USDS is
             reserveAddresses[_reserveAddresses[i]] = true;
             emit ReserveAddressAdded(_reserveAddresses[i]);
         }
+        proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
+        emit ProofOfReserveFeedSet(proofOfReserveAddress);
+        acceptableProofOfReserveTimeDelay = 3 hours;
+        emit AcceptableProofOfReserveDelaySet(acceptableProofOfReserveTimeDelay);
+    }
+
+    /**
+     * @dev Sets the proof of reserve feed address.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param newFeedAddress The address of the new proof of reserve feed.
+     */
+    function setProofOfReserveFeed(
+        address newFeedAddress
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        proofOfReserveFeed = AggregatorV3Interface(newFeedAddress);
+        emit ProofOfReserveFeedSet(newFeedAddress);
+    }
+
+    /**
+     * @dev Sets the time delay for the proof of reserve.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param newTimeDelay The new time delay for the proof of reserve.
+     */
+    function setAcceptableProofOfReserveTimeDelay(
+        uint256 newTimeDelay
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        acceptableProofOfReserveTimeDelay = newTimeDelay;
+        emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
     /**
@@ -165,6 +203,24 @@ contract USDS is
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(!isBlacklisted(to), "Address to mint is blacklisted");
+
+        uint256 totalSupply = totalSupply();
+        (
+            uint256 reserves,
+            uint256 reserveUpdatedAt
+        ) = getLatestReserve();
+
+        require(reserves > 0, "Invalid data from PoR feed");
+        require(
+            block.timestamp <=
+                reserveUpdatedAt + acceptableProofOfReserveTimeDelay,
+            "Proof of reserve is out of date"
+        );
+        require(
+            totalSupply + amount <= reserves,
+            "Total supply + requested mint amount exceeds available reserves"
+        );
+
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -232,6 +288,36 @@ contract USDS is
      */
     function isReserveAddress(address account) public view returns (bool) {
         return reserveAddresses[account];
+    }
+
+    /**
+     * @dev Retrieves the address of the ProofOfReserveFeed contract.
+     * @return The address of the ProofOfReserveFeed contract.
+     */
+    function getProofOfReserveFeed() public view returns (address) {
+        return address(proofOfReserveFeed);
+    }
+
+    /**
+     * @dev Retrieves the latest reserve value from the proofOfReserveFeed.
+     * @return reserve The latest reserve value as a uint256.
+     * @return updatedAt The timestamp of the latest reserve value.
+     */
+    function getLatestReserve()
+        public
+        view
+        returns (uint256 reserve, uint256 updatedAt)
+    {
+        (
+            /* uint80 roundID */,
+            int reserveFunds,
+            /* uint startedAt */,
+            uint roundTimeStamp,
+            /* uint80 answeredInRound */
+        ) = proofOfReserveFeed.latestRoundData();
+
+        reserve = uint256(reserveFunds);
+        updatedAt = roundTimeStamp;
     }
 
     /**
