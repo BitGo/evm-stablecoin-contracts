@@ -11,6 +11,7 @@ import { ERC20PermitUpgradeable }
         from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
+
 /// @title Offcial USDS ERC-20 Implementation
 /// @custom:security-contact support@bitgo.com
 contract USDS is
@@ -203,26 +204,33 @@ contract USDS is
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
         require(!isBlacklisted(to), "Address to mint is blacklisted");
-
-        uint256 totalSupply = totalSupply();
-        (
-            uint256 reserves,
-            uint256 reserveUpdatedAt
-        ) = getLatestReserve();
-
-        require(reserves > 0, "Invalid data from PoR feed");
-        require(
-            block.timestamp <=
-                reserveUpdatedAt + acceptableProofOfReserveTimeDelay,
-            "Proof of reserve is out of date"
-        );
-        require(
-            totalSupply + amount <= reserves,
-            "Total supply + requested mint amount exceeds available reserves"
-        );
-
+        validateProofOfReserve(amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
+    }
+
+    /**
+     * @dev Mints new tokens and assigns them to a set of addresses.
+     * @param toAddresses The addresses to which the new tokens will be minted.
+     * @param amounts The amounts of tokens to be minted for each address.
+     */
+    function mintBatch(
+        address[] memory toAddresses,
+        uint256[] memory amounts
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+        require(toAddresses.length == amounts.length, "Address array and amount array length must match");
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < toAddresses.length; i++) {
+            address to = toAddresses[i];
+            uint256 amount = amounts[i];
+            totalAmount += amount;
+
+            require(!isBlacklisted(to), "Address to mint is blacklisted");
+
+            _mint(to, amount);
+            emit Mint(to, amount);
+        }
+        validateProofOfReserve(totalAmount, true);
     }
 
     /**
@@ -335,6 +343,27 @@ contract USDS is
         returns (uint256)
     {
         return Blacklistable.balanceOf(account);
+    }
+
+    /**
+     * @dev Validates the proof of reserve.
+     * @param mintAmount The amount of tokens to be minted.
+     * @param isBatch A boolean indicating whether the mint is a batch mint or not.
+     */
+    function validateProofOfReserve(uint256 mintAmount, bool isBatch) internal view {
+        (uint256 reserves, uint256 reserveUpdateAt) = getLatestReserve();
+
+        require(reserves > 0, "Invalid data from PoR feed");
+        require(
+            block.timestamp <= reserveUpdateAt + acceptableProofOfReserveTimeDelay,
+            "Proof of reserve is out of date"
+        );
+        // For batching, we did the mints before validations
+        // So we only need to check if the total supply is less than or equal to reserves
+        require(
+            isBatch ? totalSupply() <= reserves : totalSupply() + mintAmount <= reserves,
+            "Total supply + requested mint amount exceeds available reserves"
+        );
     }
 
     /**
