@@ -86,9 +86,15 @@ describe("USDS Minting and Burning", function () {
     await dummyAggregatorInstance
       .connect(supplyController)
       .updateData(mintAmount, 1, timeStampInSeconds, 1);
-    await contractInstance
-      .connect(supplyController)
-      .mint(randomAddress.address, mintAmount);
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .mint(randomAddress.address, mintAmount)
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(addressZero, randomAddress.address, mintAmount)
+      .to.emit(contractInstance, "Mint")
+      .withArgs(randomAddress.address, mintAmount);
     const balance = await contractInstance.balanceOf(randomAddress.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
@@ -119,9 +125,17 @@ describe("USDS Minting and Burning", function () {
     expect(balance).to.equal(transferAmount);
 
     // Recover the tokens
-    await contractInstance
-      .connect(rescuer)
-      .rescueTokens(
+    await expect(
+      contractInstance
+        .connect(rescuer)
+        .rescueTokens(
+          contractInstance.getAddress(),
+          recoverAddress.address,
+          transferAmount
+        )
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(
         contractInstance.getAddress(),
         recoverAddress.address,
         transferAmount
@@ -148,9 +162,15 @@ describe("USDS Minting and Burning", function () {
       .mint(reserve1.address, burnAmount);
     totalSupply = await contractInstance.totalSupply();
     const initialBalance = await contractInstance.balanceOf(reserve1.address);
-    await contractInstance
-      .connect(supplyController)
-      .burn(reserve1.address, burnAmount);
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .burn(reserve1.address, burnAmount)
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(reserve1.address, addressZero, burnAmount)
+      .to.emit(contractInstance, "Burn")
+      .withArgs(reserve1.address, burnAmount);
     const finalBalance = await contractInstance.balanceOf(reserve1.address);
     expect(finalBalance).to.equal(initialBalance - burnAmount);
     expect(await contractInstance.totalSupply()).to.equal(
@@ -252,9 +272,13 @@ describe("USDS Minting and Burning", function () {
     expect(failed).to.be.true;
 
     // Reset proof of reserve time delay to 4 hours
-    await contractInstance
-      .connect(defaultAdmin)
-      .setAcceptableProofOfReserveTimeDelay(14400);
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .setAcceptableProofOfReserveTimeDelay(14400)
+    )
+      .to.emit(contractInstance, "AcceptableProofOfReserveDelaySet")
+      .withArgs(14400);
     const proofOfReserveTimeDelay =
       await contractInstance.acceptableProofOfReserveTimeDelay();
     expect(proofOfReserveTimeDelay).to.equal(14400);
@@ -320,9 +344,13 @@ describe("USDS Minting and Burning", function () {
     }
     expect(failed).to.be.true;
     // setting state back as is
-    await contractInstance
-      .connect(defaultAdmin)
-      .setProofOfReserveFeed(dummyAggregatorInstance.getAddress());
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(dummyAggregatorInstance.getAddress())
+    )
+      .to.emit(contractInstance, "ProofOfReserveFeedSet")
+      .withArgs(dummyAggregatorInstance.getAddress());
   });
 
   it("Should mint tokens successfully in batch to multiple external addresses", async function () {
@@ -339,9 +367,19 @@ describe("USDS Minting and Burning", function () {
     await dummyAggregatorInstance
       .connect(supplyController)
       .updateData(reserve, 1, timeStampInSeconds, 1);
-    await contractInstance
-      .connect(supplyController)
-      .mintBatch(addresses, amounts);
+    await expect(
+      contractInstance.connect(supplyController).mintBatch(addresses, amounts)
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(addressZero, addresses[0], mintAmount)
+      .to.emit(contractInstance, "Mint")
+      .withArgs(addresses[0], mintAmount)
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(addressZero, addresses[1], mintAmount * 2n)
+      .to.emit(contractInstance, "Mint")
+      .withArgs(addresses[1], mintAmount * 2n)
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(addressZero, addresses[2], mintAmount * 3n);
 
     for (const address of addresses) {
       const balance = await contractInstance.balanceOf(address);
@@ -438,9 +476,13 @@ describe("USDS Minting and Burning", function () {
 
   it("Should add a reserve address successfully", async function () {
     const newReserveAddress = "0x1234567890123456789012345678901234567890";
-    await contractInstance
-      .connect(defaultAdmin)
-      .addReserveAddress(newReserveAddress);
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .addReserveAddress(newReserveAddress)
+    )
+      .to.emit(contractInstance, "ReserveAddressAdded")
+      .withArgs(newReserveAddress);
     const isReserveAddress =
       await contractInstance.isReserveAddress(newReserveAddress);
     expect(isReserveAddress).to.be.true;
@@ -464,9 +506,13 @@ describe("USDS Minting and Burning", function () {
 
   it("Should remove a reserve address successfully", async function () {
     const reserveAddressToRemove = reserve1.address;
-    await contractInstance
-      .connect(defaultAdmin)
-      .removeReserveAddress(reserveAddressToRemove);
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .removeReserveAddress(reserveAddressToRemove)
+    )
+      .to.emit(contractInstance, "ReserveAddressRemoved")
+      .withArgs(reserveAddressToRemove);
     const isReserveAddress = await contractInstance.isReserveAddress(
       reserveAddressToRemove
     );
