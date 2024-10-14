@@ -18,6 +18,7 @@ describe("USDS Minting and Burning", function () {
   let recoverAddress: SignerWithAddress;
   let randomAddress: SignerWithAddress;
   const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
+  const addressZero = "0x0000000000000000000000000000000000000000";
 
   before(async function () {
     [
@@ -168,7 +169,7 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Address is not a reserve address'"
+        "VM Exception while processing transaction: reverted with reason string 'Burn only allowed from a reserve address'"
       );
 
       expect(error).to.be.an("error");
@@ -267,6 +268,22 @@ describe("USDS Minting and Burning", function () {
     expect(newBalance).to.equal(balance + mintAmount);
   });
 
+  it("Should throw error when setAcceptableProofOfReserveTimeDelay is set to zero", async function () {
+    let failed = false;
+    try {
+      await contractInstance
+        .connect(defaultAdmin)
+        .setAcceptableProofOfReserveTimeDelay(0);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Time delay must be greater than zero'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+  });
+
   it("Should be able to update the proof of reserve feed", async function () {
     const newProofFeed = await ethers.getContractFactory("DummyAggregatorV3");
     const newProofFeedContract = await newProofFeed.deploy(
@@ -287,6 +304,21 @@ describe("USDS Minting and Burning", function () {
       .connect(defaultAdmin)
       .getLatestReserve();
     expect(proofFeedData).to.equal(1234);
+
+    // Should error out if proof of address set to zero address
+    let failed = false;
+    try {
+      await contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(addressZero);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Cannot add zero address as a proof of reserve feed'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
     // setting state back as is
     await contractInstance
       .connect(defaultAdmin)
@@ -402,5 +434,42 @@ describe("USDS Minting and Burning", function () {
     }
 
     expect(failed).to.be.true;
+  });
+
+  it("Should add a reserve address successfully", async function () {
+    const newReserveAddress = "0x1234567890123456789012345678901234567890";
+    await contractInstance
+      .connect(defaultAdmin)
+      .addReserveAddress(newReserveAddress);
+    const isReserveAddress =
+      await contractInstance.isReserveAddress(newReserveAddress);
+    expect(isReserveAddress).to.be.true;
+  });
+
+  it("Should throw an error when trying to add a zero address as a reserve address", async function () {
+    let failed = false;
+    try {
+      await contractInstance
+        .connect(defaultAdmin)
+        .addReserveAddress(addressZero);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).equal(
+        "VM Exception while processing transaction: reverted with reason string 'Cannot add zero address as a reserve address'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+  });
+
+  it("Should remove a reserve address successfully", async function () {
+    const reserveAddressToRemove = reserve1.address;
+    await contractInstance
+      .connect(defaultAdmin)
+      .removeReserveAddress(reserveAddressToRemove);
+    const isReserveAddress = await contractInstance.isReserveAddress(
+      reserveAddressToRemove
+    );
+    expect(isReserveAddress).to.be.false;
   });
 });
