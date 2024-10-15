@@ -344,23 +344,6 @@ contract USDS is
     }
 
     /**
-     * @dev Returns the balance of the specified account.
-     * @param account The address to check the balance of.
-     * @return The balance of the specified account.
-     */
-    function balanceOf(
-        address account
-    )
-        public
-        view
-        virtual
-        override(Blacklistable, ERC20Upgradeable)
-        returns (uint256)
-    {
-        return Blacklistable.balanceOf(account);
-    }
-
-    /**
      * @dev Validates the proof of reserve.
      * @param mintAmount The amount of tokens to be minted.
      * @param isBatch A boolean indicating whether the mint is a batch mint or not.
@@ -401,8 +384,8 @@ contract USDS is
         uint256 value
     )
         internal
-        override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
+        override(ERC20Upgradeable, ERC20PausableUpgradeable)
     {
-        Blacklistable._update(from, to, value);
+        ERC20PausableUpgradeable._update(from, to, value);
     }
 }
