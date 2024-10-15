@@ -3,7 +3,7 @@ import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
-describe("USDS Minting and Burning", function () {
+describe("Transfer Tests", function () {
   let contractInstance: USDS;
   let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;

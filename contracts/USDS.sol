@@ -403,6 +403,12 @@ contract USDS is
         internal
         override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
     {
-        Blacklistable._update(from, to, value);
+        // This will trigger the ERC20PausableUpgradeable._update
+        // enforcing the pausable feature and then
+        // will trigger the Blacklistable._update 
+        // since ERC20PausableUpgradeable is inherited after Blacklistable
+        // This won't trigger the ERC20Upgradeable._update
+        // since we are not calling super._update in Blacklistable._update
+        ERC20PausableUpgradeable._update(from, to, value);
     }
 }

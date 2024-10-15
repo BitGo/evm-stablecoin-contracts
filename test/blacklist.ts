@@ -14,6 +14,7 @@ describe("USDS blacklist", function () {
   let blacklister: SignerWithAddress;
   let targetAccount: SignerWithAddress;
   let withdrawer: SignerWithAddress;
+  const addressZero = "0x0000000000000000000000000000000000000000";
 
   before(async function () {
     [
@@ -73,9 +74,11 @@ describe("USDS blacklist", function () {
   });
 
   it("Should blacklist an account", async function () {
-    await contractInstance
-      .connect(blacklister)
-      .blacklist(targetAccount.address);
+    await expect(
+      contractInstance.connect(blacklister).blacklist(targetAccount.address)
+    )
+      .to.emit(contractInstance, "Blacklisted")
+      .withArgs(targetAccount.address);
     const isBlacklisted = await contractInstance.isBlacklisted(
       targetAccount.address
     );
@@ -92,9 +95,11 @@ describe("USDS blacklist", function () {
       .isBlacklisted(targetAccount.address);
     expect(isBlacklisted).to.be.true;
 
-    await contractInstance
-      .connect(blacklister)
-      .unblacklist(targetAccount.address);
+    await expect(
+      contractInstance.connect(blacklister).unblacklist(targetAccount.address)
+    )
+      .to.emit(contractInstance, "Unblacklisted")
+      .withArgs(targetAccount.address);
     isBlacklisted = await contractInstance.isBlacklisted(targetAccount.address);
     expect(isBlacklisted).to.be.false;
   });
@@ -132,9 +137,11 @@ describe("USDS blacklist", function () {
 
   it("Should transfer tokens correctly for non-blacklisted addresses", async function () {
     // Transfer tokens from reserve to receiver
-    await contractInstance
-      .connect(reserve)
-      .transfer(targetAccount.address, 500);
+    await expect(
+      contractInstance.connect(reserve).transfer(targetAccount.address, 500)
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(reserve.address, targetAccount.address, 500);
 
     const isBlacklisted = await contractInstance.isBlacklisted(
       targetAccount.address
@@ -256,13 +263,24 @@ describe("USDS blacklist", function () {
     expect(targetBalance).to.equal(750);
 
     // Destroy blacklisted funds
-    await contractInstance
-      .connect(supplyController)
-      .destroyBlacklistedFunds(targetAccount.address);
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .destroyBlacklistedFunds(targetAccount.address)
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(targetAccount.address, addressZero, 750)
+      .to.emit(contractInstance, "Burn")
+      .withArgs(targetAccount.address, 750);
     const targetBalanceAfter = await contractInstance.balanceOf(
       targetAccount.address
     );
     expect(targetBalanceAfter).to.equal(0);
+    // Check if the address is still blacklisted
+    const isBlacklisted = await contractInstance.isBlacklisted(
+      targetAccount.address
+    );
+    expect(isBlacklisted).to.be.true;
   });
 
   it("Should prevent non-blacklister from destroying blacklisted funds", async function () {
