@@ -1,6 +1,6 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS Minting and Burning", function () {
@@ -98,6 +98,65 @@ describe("USDS Minting and Burning", function () {
     const balance = await contractInstance.balanceOf(randomAddress.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
+  });
+
+  it("Should not allow minting when the contract is paused", async function () {
+    const mintAmount = ethers.parseUnits("1000", 18);
+
+    // Pause the contract
+    await contractInstance.connect(freezer).pause();
+
+    // Try to mint tokens while paused and check for the custom error
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .mint(randomAddress.address, mintAmount)
+    )
+      .to.be.revertedWithCustomError(contractInstance, "EnforcedPause");
+
+    // Unpause the contract
+    await contractInstance.connect(freezer).unpause();
+  });
+
+  it("Should add a token address successfully to trusted token list", async function () {
+    const newTrustedToken = contractInstance.getAddress();
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .addTrustedToken(newTrustedToken)
+    )
+      .to.emit(contractInstance, "TrustedTokenAdded")
+      .withArgs(newTrustedToken);
+    const isTrustedToken =
+      await contractInstance.isTrustedToken(newTrustedToken);
+    expect(isTrustedToken).to.be.true;
+
+    const randomTrustedToken = "0xABcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD";
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .addTrustedToken(randomTrustedToken)
+    )
+      .to.emit(contractInstance, "TrustedTokenAdded")
+      .withArgs(randomTrustedToken);
+    const isTrustedToken1 =
+      await contractInstance.isTrustedToken(randomTrustedToken);
+    expect(isTrustedToken1).to.be.true;
+  });
+
+  it("Should remove a token address successfully from trusted token list", async function () {
+    const trustedTokenToRemove = "0xABcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD";
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .removeTrustedToken(trustedTokenToRemove)
+    )
+      .to.emit(contractInstance, "TrustedTokenRemoved")
+      .withArgs(trustedTokenToRemove);
+    const isTrustedToken = await contractInstance.isReserveAddress(
+      trustedTokenToRemove
+    );
+    expect(isTrustedToken).to.be.false;
   });
 
   it("Should be able to recover tokens stuck in contract address", async function () {
@@ -316,11 +375,15 @@ describe("USDS Minting and Burning", function () {
       1
     );
     const newProofFeedAddress = await newProofFeedContract.getAddress();
+    await newProofFeedContract
+      .connect(supplyController)
+      .updateData(12345, 1, timeStampInSeconds, 1);
     await contractInstance
       .connect(defaultAdmin)
       .setProofOfReserveFeed(newProofFeedAddress);
     const currentProofFeed = await contractInstance.getProofOfReserveFeed();
     expect(currentProofFeed).to.equal(newProofFeedAddress);
+
     await newProofFeedContract
       .connect(supplyController)
       .updateData(1234, 1, timeStampInSeconds, 1);
@@ -343,7 +406,11 @@ describe("USDS Minting and Burning", function () {
       expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
+
     // setting state back as is
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(12345, 1, timeStampInSeconds, 1);
     await expect(
       contractInstance
         .connect(defaultAdmin)
@@ -485,6 +552,25 @@ describe("USDS Minting and Burning", function () {
       .withArgs(newReserveAddress);
     const isReserveAddress =
       await contractInstance.isReserveAddress(newReserveAddress);
+    expect(isReserveAddress).to.be.true;
+  });
+
+  it("Should skip write and event emission if address is already a reserve", async function () {
+    const oldReserveAddress = "0x1234567890123456789012345678901234567890";
+    const tx = await contractInstance
+      .connect(defaultAdmin)
+      .addReserveAddress(oldReserveAddress);
+
+    const receipt = await tx.wait();
+
+    const eventFound = receipt.logs.some((log) => {
+      const parsedLog = contractInstance.interface.parseLog(log);
+      return parsedLog.name === "ReserveAddressAdded";
+    });
+    expect(eventFound).to.be.false;
+
+    const isReserveAddress =
+      await contractInstance.isReserveAddress(oldReserveAddress);
     expect(isReserveAddress).to.be.true;
   });
 

@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
+    "debug": "hardhat test --grep 'Should skip write and event emission if address is already a reserve' --network hardhat",
     "lint": "eslint . && hardhat check",
     "format": "prettier --write --plugin=prettier-plugin-solidity 'contracts/*.sol'"
   },

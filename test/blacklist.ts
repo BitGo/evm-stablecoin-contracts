@@ -1,7 +1,7 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { USDS, DummyAggregatorV3 } from "../typechain-types";
+import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS blacklist", function () {
   let contractInstance: USDS;
@@ -66,11 +66,16 @@ describe("USDS blacklist", function () {
   });
 
   beforeEach(async function () {
-    // Reset blacklists
-    await contractInstance
-      .connect(blacklister)
-      .unblacklist(targetAccount.address);
-    await contractInstance.connect(blacklister).unblacklist(reserve.address);
+    // Ensure the target accounts are blacklisted before unblacklisting them for reset.
+    if (await contractInstance.isBlacklisted(targetAccount.address)) {
+      await contractInstance
+        .connect(blacklister)
+        .unblacklist(targetAccount.address);
+    }
+
+    if (await contractInstance.isBlacklisted(reserve.address)) {
+      await contractInstance.connect(blacklister).unblacklist(reserve.address);
+    }
   });
 
   it("Should blacklist an account", async function () {

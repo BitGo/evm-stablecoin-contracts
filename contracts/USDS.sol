@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import "hardhat/console.sol";
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -33,12 +35,16 @@ contract USDS is
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
     mapping(address => bool) public reserveAddresses;
+    mapping(address => bool) public trustedTokens;
+
     uint256 public acceptableProofOfReserveTimeDelay;
 
     event Burn(address indexed from, uint256 amount);
     event Mint(address indexed to, uint256 amount);
     event ReserveAddressAdded(address indexed newAddress);
     event ReserveAddressRemoved(address indexed oldAddress);
+    event TrustedTokenAdded(address indexed newTokenAddress);
+    event TrustedTokenRemoved(address indexed oldTokenAddress);
     event ProofOfReserveFeedSet(address newFeed);
     event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
 
@@ -95,13 +101,32 @@ contract USDS is
      * @dev Sets the proof of reserve feed address.
      * Requirements:
      * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * - The new feed address must implement the AggregatorV3Interface.
      * @param newFeedAddress The address of the new proof of reserve feed.
      */
     function setProofOfReserveFeed(
         address newFeedAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newFeedAddress != address(0), "Cannot add zero address as a proof of reserve feed");
-        proofOfReserveFeed = AggregatorV3Interface(newFeedAddress);
+
+        // ERC165 check to ensure the new feed implements AggregatorV3Interface
+        // require(IERC165(newFeedAddress).supportsInterface(type(AggregatorV3Interface).interfaceId), "New feed must implement AggregatorV3Interface");
+
+        AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
+
+        // Check if the feed is stale by calling a method to fetch the latest data
+        (
+            /* uint80 roundID */,
+            int256 reserveFunds,
+            /* uint startedAt */,
+            uint256 roundTimeStamp,
+            /* uint80 answeredInRound */
+        ) = newFeed.latestRoundData();
+        
+        require(reserveFunds > 0, "Stale feed data or invalid feed");
+        require(roundTimeStamp > block.timestamp - acceptableProofOfReserveTimeDelay, "Feed data is stale");
+
+        proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -127,8 +152,12 @@ contract USDS is
         address newAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newAddress != address(0), "Cannot add zero address as a reserve address");
-        reserveAddresses[newAddress] = true;
-        emit ReserveAddressAdded(newAddress);
+
+        // Check if the address is already a reserve address
+        if (!reserveAddresses[newAddress]) {
+            reserveAddresses[newAddress] = true;
+            emit ReserveAddressAdded(newAddress);
+        }
     }
 
     /**
@@ -156,6 +185,39 @@ contract USDS is
     }
 
     /**
+     * @dev Add tokens to the trusted list.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param token The address of the token to be added to the trusted list.
+     */
+    function addTrustedToken(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(token != address(0), "Cannot add zero address token as a trusted token address");
+        trustedTokens[token] = true;
+        emit TrustedTokenAdded(token);
+    }
+
+    /**
+     * @dev Checks if a token is a trusted token address.
+     * @param token The token to be checked.
+     * @return A boolean indicating whether the token is a trusted token or not.
+     */
+    function isTrustedToken(address token) public view returns (bool) {
+        return trustedTokens[token];
+    }
+
+    /**
+     * @dev Remove tokens to the trusted list.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param token The address of the token to be removed from the trusted list.
+     */
+    function removeTrustedToken(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(token != address(0), "Cannot remove zero address token as a trusted token address");
+        trustedTokens[token] = false;
+        emit TrustedTokenRemoved(token);
+    }
+
+    /**
      * @dev Withdraws tokens from the contract and transfers them to the recipient.
      * @param token The address of the token to be withdrawn.
      * @param recipient The address to which the tokens will be transferred.
@@ -166,6 +228,7 @@ contract USDS is
         address recipient,
         uint256 amount
     ) external onlyRole(RESCUER_ROLE) {
+        require(trustedTokens[address(token)], "Token is not trusted");
         require(!isBlacklisted(recipient), "Recipient is blacklisted");
         token.safeTransfer(recipient, amount);
     }
@@ -198,7 +261,7 @@ contract USDS is
         address from,
         address to,
         uint256 value
-    ) public virtual override returns (bool) {
+    ) public virtual override whenNotPaused returns (bool) {
         address spender = _msgSender();
         require(
             !isBlacklisted(spender),
@@ -208,6 +271,10 @@ contract USDS is
             !isBlacklisted(from),
             "Sender address is blacklisted"
         );
+        // require(
+        //     !isBlacklisted(to), 
+        //     "Recipient address is blacklisted"
+        // );
         require(
             value != 0,
             "Transfer amount must be greater than zero"
@@ -219,6 +286,8 @@ contract USDS is
 
     /**
      * @dev Transfers tokens from the caller's account to another account.
+     * Zero-value transfers are permitted to align with the ERC-20 standard
+     * and to trigger certain event logs or off-chain workflows without transferring tokens.
      * @param to The address to transfer tokens to.
      * @param value The amount of tokens to transfer.
      * @return A boolean value indicating whether the transfer was successful or not.
@@ -226,25 +295,33 @@ contract USDS is
     function transfer(
         address to,
         uint256 value
-    ) public virtual override returns (bool) {
+    ) public virtual override whenNotPaused returns (bool) {
         address owner = _msgSender();
         require(
             !isBlacklisted(owner),
             "Sender address is blacklisted"
         );
+        // require(
+        //     !isBlacklisted(to), 
+        //     "Recipient address is blacklisted"
+        // );
         _transfer(owner, to, value);
         return true;
     }
 
     /**
      * @dev Mints new tokens and assigns them to an address.
+     * Zero-value minting is permitted to ensure compatibility with off-chain workflows or systems 
+     * where the action of minting might need to be logged or executed without an actual token amount.
+     * This flexibility avoids unnecessary reverts in cases where the minting operation is 
+     * initiated programmatically or for testing purposes.
      * @param to The address to which the new tokens will be minted.
      * @param amount The amount of tokens to be minted.
      */
     function mint(
         address to,
         uint256 amount
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) whenNotPaused {
         require(!isBlacklisted(to), "Minting failed: recipient address is blacklisted");
         validateProofOfReserve(amount, false);
         _mint(to, amount);
@@ -259,7 +336,7 @@ contract USDS is
     function mintBatch(
         address[] memory toAddresses,
         uint256[] memory amounts
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) whenNotPaused {
         require(toAddresses.length == amounts.length, "Address array and amount array length must match");
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
@@ -283,7 +360,7 @@ contract USDS is
     function burn(
         address from,
         uint256 amount
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) whenNotPaused {
         require(!isBlacklisted(from), "Burn not allowed from blacklisted address");
         require(reserveAddresses[from], "Burn only allowed from a reserve address");
         _burn(from, amount);
