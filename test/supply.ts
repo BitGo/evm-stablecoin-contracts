@@ -1,6 +1,6 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS Minting and Burning", function () {
@@ -316,6 +316,9 @@ describe("USDS Minting and Burning", function () {
       1
     );
     const newProofFeedAddress = await newProofFeedContract.getAddress();
+    await newProofFeedContract
+      .connect(supplyController)
+      .updateData(12345, 1, timeStampInSeconds, 1);
     await contractInstance
       .connect(defaultAdmin)
       .setProofOfReserveFeed(newProofFeedAddress);
@@ -344,6 +347,9 @@ describe("USDS Minting and Burning", function () {
     }
     expect(failed).to.be.true;
     // setting state back as is
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(12345, 1, timeStampInSeconds, 1);
     await expect(
       contractInstance
         .connect(defaultAdmin)
@@ -351,6 +357,35 @@ describe("USDS Minting and Burning", function () {
     )
       .to.emit(contractInstance, "ProofOfReserveFeedSet")
       .withArgs(dummyAggregatorInstance.getAddress());
+  });
+
+  it("Should revert if the feed does not implement AggregatorV3Interface", async function () {
+    // Deploy a contract that does not implement AggregatorV3Interface
+    const InvalidContractFactory = await ethers.getContractFactory("InvalidContract");
+    const invalidContract = await InvalidContractFactory.deploy();
+    const invalidContractAddress = await invalidContract.getAddress();
+
+    // Attempt to set it as the proof of reserve feed
+    let failed = false;
+    try {
+      await contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(invalidContractAddress);
+    } catch (error) {
+      failed = true;
+
+      // Assert the error message
+      expect((error as Error).message).to.contain(
+        "VM Exception while processing transaction: reverted with reason string 'New feed must implement AggregatorV3Interface'"
+      );
+    }
+
+    // Ensure the transaction failed
+    expect(failed).to.be.true;
+
+    // Confirm that the proofOfReserveFeed was not updated
+    const currentProofFeed = await contractInstance.getProofOfReserveFeed();
+    expect(currentProofFeed).to.not.equal(invalidContractAddress);
   });
 
   it("Should mint tokens successfully in batch to multiple external addresses", async function () {

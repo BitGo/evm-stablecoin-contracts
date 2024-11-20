@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -100,8 +101,38 @@ contract USDS is
     function setProofOfReserveFeed(
         address newFeedAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newFeedAddress != address(0), "Cannot add zero address as a proof of reserve feed");
-        proofOfReserveFeed = AggregatorV3Interface(newFeedAddress);
+        require(
+            newFeedAddress != address(0),
+            "Cannot add zero address as a proof of reserve feed"
+        );
+
+        // ERC165 check to ensure the new feed implements AggregatorV3Interface
+        require(
+            IERC165(newFeedAddress).supportsInterface(
+                type(AggregatorV3Interface).interfaceId
+            ),
+            "New feed must implement AggregatorV3Interface"
+        );
+
+        AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
+
+        // Check if the feed is stale by calling a method to fetch the latest data
+        (
+            ,
+            /* uint80 roundID */ int256 reserveFunds,
+            ,
+            /* uint startedAt */ uint256 roundTimeStamp /* uint80 answeredInRound */,
+
+        ) = newFeed.latestRoundData();
+
+        require(reserveFunds > 0, "Stale feed data or invalid feed");
+        require(
+            roundTimeStamp >
+                block.timestamp - acceptableProofOfReserveTimeDelay,
+            "Feed data is stale"
+        );
+
+        proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -126,9 +157,16 @@ contract USDS is
     function addReserveAddress(
         address newAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newAddress != address(0), "Cannot add zero address as a reserve address");
-        reserveAddresses[newAddress] = true;
-        emit ReserveAddressAdded(newAddress);
+        require(
+            newAddress != address(0),
+            "Cannot add zero address as a reserve address"
+        );
+
+        // Check if the address is already a reserve address
+        if (!reserveAddresses[newAddress]) {
+            reserveAddresses[newAddress] = true;
+            emit ReserveAddressAdded(newAddress);
+        }
     }
 
     /**
@@ -184,7 +222,6 @@ contract USDS is
         _unpause();
     }
 
-
     /**
      * @dev Transfers `amount` tokens from `sender` to `recipient` using the allowance mechanism.
      * `amount` is then deducted from the caller's allowance.
@@ -219,6 +256,8 @@ contract USDS is
 
     /**
      * @dev Transfers tokens from the caller's account to another account.
+     * Zero-value transfers are permitted to align with the ERC-20 standard
+     * and to trigger certain event logs or off-chain workflows without transferring tokens.
      * @param to The address to transfer tokens to.
      * @param value The amount of tokens to transfer.
      * @return A boolean value indicating whether the transfer was successful or not.
@@ -238,6 +277,10 @@ contract USDS is
 
     /**
      * @dev Mints new tokens and assigns them to an address.
+     * Zero-value minting is permitted to ensure compatibility with off-chain workflows or systems
+     * where the action of minting might need to be logged or executed without an actual token amount.
+     * This flexibility avoids unnecessary reverts in cases where the minting operation is
+     * initiated programmatically or for testing purposes.
      * @param to The address to which the new tokens will be minted.
      * @param amount The amount of tokens to be minted.
      */
@@ -289,7 +332,6 @@ contract USDS is
         _burn(from, amount);
         emit Burn(from, amount);
     }
-
 
     /**
      * @dev Returns the number of decimals used by the token.
@@ -373,8 +415,13 @@ contract USDS is
             block.timestamp <= reserveUpdateAt + acceptableProofOfReserveTimeDelay,
             "Proof of reserve is out of date"
         );
-        // For batching, we did the mints before validations
-        // So we only need to check if the total supply is less than or equal to reserves
+
+        // For batched minting, the mint operation is performed before validation.
+        // As a result, the minted amount is already included in `totalSupply` at this point.
+        // Therefore, in batch mode (`isBatch`), we only need to verify that `totalSupply`
+        // does not exceed the available `reserves`.
+        // In non-batch mode, the `mintAmount` is not yet included in `totalSupply`,
+        // so we need to ensure that `totalSupply + mintAmount` stays within `reserves`.
         require(
             isBatch ? totalSupply() <= reserves : totalSupply() + mintAmount <= reserves,
             "Total supply + requested mint amount exceeds available reserves"

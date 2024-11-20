@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {AggregatorV3Interface}
-    from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 // Implementing the AggregatorV3Interface
 // for testing purposes
-contract DummyAggregatorV3 is AggregatorV3Interface {
-
+contract DummyAggregatorV3 is ERC165, AggregatorV3Interface {
     uint8 private _decimals;
     string private _description;
     uint256 private _version;
@@ -84,5 +83,13 @@ contract DummyAggregatorV3 is AggregatorV3Interface {
         _updatedAt = newUpdatedAt;
         _answeredInRound = newAnsweredInRound;
     }
-}
 
+    // Override supportsInterface to include AggregatorV3Interface
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override returns (bool) {
+        return
+            interfaceId == type(AggregatorV3Interface).interfaceId ||
+            super.supportsInterface(interfaceId);
+    }
+}
