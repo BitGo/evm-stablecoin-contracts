@@ -1,6 +1,6 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS Minting and Burning", function () {
@@ -55,7 +55,6 @@ describe("USDS Minting and Burning", function () {
         blacklister.address,
         rescuer.address,
         dummyAggregatorAddress,
-        [reserve1.address, reserve2.address, reserve3.address],
       ],
       { kind: "uups" }
     );
@@ -67,18 +66,6 @@ describe("USDS Minting and Burning", function () {
 
     expect(await contractInstance.totalSupply()).to.equal(0);
     expect(paused).to.be.false;
-  });
-
-  it("Should correctly identify reserve addresses", async function () {
-    const isReserve1 = await contractInstance.isReserveAddress(
-      reserve1.address
-    );
-    const isReserve2 = await contractInstance.isReserveAddress(
-      reserve2.address
-    );
-
-    expect(isReserve1).to.be.true;
-    expect(isReserve2).to.be.true;
   });
 
   it("Should mint tokens successfully to any external address", async function () {
@@ -176,25 +163,6 @@ describe("USDS Minting and Burning", function () {
     expect(await contractInstance.totalSupply()).to.equal(
       totalSupply - burnAmount
     );
-  });
-
-  it("Should fail to burn tokens from a non-reserve address", async function () {
-    const burnAmount = ethers.parseUnits("500", 18);
-    let failed = false;
-    try {
-      // Attempt to burn tokens from a non-reserve address (e.g., freezer)
-      await contractInstance
-        .connect(supplyController)
-        .burn(freezer.address, burnAmount);
-    } catch (error) {
-      failed = true;
-      expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Burn only allowed from a reserve address'"
-      );
-
-      expect(error).to.be.an("error");
-    }
-    expect(failed).to.be.true;
   });
 
   it("Should fail to mint tokens when called by unauthorized address", async function () {
@@ -472,50 +440,5 @@ describe("USDS Minting and Burning", function () {
     }
 
     expect(failed).to.be.true;
-  });
-
-  it("Should add a reserve address successfully", async function () {
-    const newReserveAddress = "0x1234567890123456789012345678901234567890";
-    await expect(
-      contractInstance
-        .connect(defaultAdmin)
-        .addReserveAddress(newReserveAddress)
-    )
-      .to.emit(contractInstance, "ReserveAddressAdded")
-      .withArgs(newReserveAddress);
-    const isReserveAddress =
-      await contractInstance.isReserveAddress(newReserveAddress);
-    expect(isReserveAddress).to.be.true;
-  });
-
-  it("Should throw an error when trying to add a zero address as a reserve address", async function () {
-    let failed = false;
-    try {
-      await contractInstance
-        .connect(defaultAdmin)
-        .addReserveAddress(addressZero);
-    } catch (error) {
-      failed = true;
-      expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Cannot add zero address as a reserve address'"
-      );
-      expect(error).to.be.an("error");
-    }
-    expect(failed).to.be.true;
-  });
-
-  it("Should remove a reserve address successfully", async function () {
-    const reserveAddressToRemove = reserve1.address;
-    await expect(
-      contractInstance
-        .connect(defaultAdmin)
-        .removeReserveAddress(reserveAddressToRemove)
-    )
-      .to.emit(contractInstance, "ReserveAddressRemoved")
-      .withArgs(reserveAddressToRemove);
-    const isReserveAddress = await contractInstance.isReserveAddress(
-      reserveAddressToRemove
-    );
-    expect(isReserveAddress).to.be.false;
   });
 });

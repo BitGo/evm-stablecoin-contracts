@@ -1,7 +1,7 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { USDS, DummyAggregatorV3 } from "../typechain-types";
+import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS blacklist", function () {
   let contractInstance: USDS;
@@ -49,7 +49,6 @@ describe("USDS blacklist", function () {
         blacklister.address,
         withdrawer.address,
         dummyAggregatorAddress,
-        [reserve.address],
       ],
       { kind: "uups" }
     );
@@ -236,7 +235,7 @@ describe("USDS blacklist", function () {
     } catch (error) {
       expect(error).to.be.an("error");
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Spender address is blacklisted'"
+        "VM Exception while processing transaction: reverted with reason string 'Blacklistable: Spender is blacklisted'"
       );
     }
 

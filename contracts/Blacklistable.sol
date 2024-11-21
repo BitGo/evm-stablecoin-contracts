@@ -14,6 +14,8 @@ contract Blacklistable is
     AccessControlDefaultAdminRulesUpgradeable,
     ERC20Upgradeable
 {
+    bool internal _skipBlacklistCheck;
+
     event Blacklisted(address indexed account);
     event Unblacklisted(address indexed account);
 
@@ -81,6 +83,50 @@ contract Blacklistable is
     }
 
     /**
+     * @dev Its a helper function to ensures that the transfer operation
+     * does not involve blacklisted addresses.
+     * @param from The address to transfer from.
+     * @param to The address to transfer to.
+     */
+    function _checkBlacklist(address from, address to) internal view {
+        // This is a special case of burn where we want to destroy funds on a blacklisted address
+        if (_skipBlacklistCheck) {
+            require(
+                isBlacklisted(from),
+                "Blacklistable: Sender is not blacklisted"
+            );
+            return;
+        }
+
+        // Mint case: `from` is the zero address
+        if (from == address(0)) {
+            require(
+                !isBlacklisted(to),
+                "Blacklistable: Receiver is blacklisted"
+            );
+        }
+        // Burn case: `to` is the zero address
+        else if (to == address(0)) {
+            require(
+                !isBlacklisted(from),
+                "Blacklistable: Sender is blacklisted"
+            );
+        }
+        // Transfer case: both `from` and `to` are non-zero addresses
+        else if (from != address(0) && to != address(0)) {
+            require(
+                !isBlacklisted(from),
+                "Blacklistable: Sender is blacklisted"
+            );
+            address spender = _msgSender();
+            require(
+                !isBlacklisted(spender),
+                "Blacklistable: Spender is blacklisted"
+            );
+        }
+    }
+
+    /**
      * @dev Updates the balances and total supply when a transfer occurs.
      * @param from The address to transfer from.
      * @param to The address to transfer to.
@@ -91,7 +137,10 @@ contract Blacklistable is
         address to,
         uint256 value
     ) internal virtual override {
+        _checkBlacklist(from, to);
+
         ERC20Storage storage $ = getERC20Storage();
+
         if (from == address(0)) {
             // Overflow check required: The rest of the code assumes that totalSupply never overflows
             $._totalSupply += value;

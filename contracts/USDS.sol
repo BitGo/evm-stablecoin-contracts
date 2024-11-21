@@ -11,7 +11,6 @@ import { ERC20PermitUpgradeable }
         from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
-
 /// @title Official USDS ERC-20 Implementation
 /// @custom:security-contact support@bitgo.com
 contract USDS is
@@ -32,13 +31,10 @@ contract USDS is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
-    mapping(address => bool) public reserveAddresses;
     uint256 public acceptableProofOfReserveTimeDelay;
 
     event Burn(address indexed from, uint256 amount);
     event Mint(address indexed to, uint256 amount);
-    event ReserveAddressAdded(address indexed newAddress);
-    event ReserveAddressRemoved(address indexed oldAddress);
     event ProofOfReserveFeedSet(address newFeed);
     event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
 
@@ -56,7 +52,6 @@ contract USDS is
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
      * @param proofOfReserveAddress The address of the PoR feed.
-     * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
         address defaultAdmin,
@@ -65,8 +60,7 @@ contract USDS is
         address upgrader,
         address blacklister,
         address rescuer,
-        address proofOfReserveAddress,
-        address[] memory _reserveAddresses
+        address proofOfReserveAddress
     ) public initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
@@ -79,16 +73,16 @@ contract USDS is
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
-        for (uint256 i = 0; i < _reserveAddresses.length; i++) {
-            require(_reserveAddresses[i] != address(0), "Cannot add zero address as a reserve address");
-            reserveAddresses[_reserveAddresses[i]] = true;
-            emit ReserveAddressAdded(_reserveAddresses[i]);
-        }
-        require(proofOfReserveAddress != address(0), "Cannot add zero address as a proof of reserve feed");
+        require(
+            proofOfReserveAddress != address(0),
+            "Cannot add zero address as a proof of reserve feed"
+        );
         proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
         acceptableProofOfReserveTimeDelay = 3 hours;
-        emit AcceptableProofOfReserveDelaySet(acceptableProofOfReserveTimeDelay);
+        emit AcceptableProofOfReserveDelaySet(
+            acceptableProofOfReserveTimeDelay
+        );
     }
 
     /**
@@ -100,7 +94,10 @@ contract USDS is
     function setProofOfReserveFeed(
         address newFeedAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newFeedAddress != address(0), "Cannot add zero address as a proof of reserve feed");
+        require(
+            newFeedAddress != address(0),
+            "Cannot add zero address as a proof of reserve feed"
+        );
         proofOfReserveFeed = AggregatorV3Interface(newFeedAddress);
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
@@ -120,39 +117,21 @@ contract USDS is
     }
 
     /**
-     * @dev Adds a reserve address.
-     * @param newAddress The address to be added as a reserve address.
-     */
-    function addReserveAddress(
-        address newAddress
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newAddress != address(0), "Cannot add zero address as a reserve address");
-        reserveAddresses[newAddress] = true;
-        emit ReserveAddressAdded(newAddress);
-    }
-
-    /**
-     * @dev Removes a reserve address.
-     * @param oldAddress The address to be removed from the reserve addresses.
-     */
-    function removeReserveAddress(
-        address oldAddress
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        reserveAddresses[oldAddress] = false;
-        emit ReserveAddressRemoved(oldAddress);
-    }
-
-    /**
      * @dev Destroys blacklisted funds.
      * @param account The address of the account with blacklisted funds.
      */
     function destroyBlacklistedFunds(
         address account
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(isBlacklisted(account), "Address is not blacklisted");
+        // This will ensure that the function cannot be called again while the flag is active.
+        require(!_skipBlacklistCheck, "Reentrant call detected");
+
+        _skipBlacklistCheck = true; // Temporarily skip blacklist validation
+
         uint256 balance = balanceOf(account);
-        _burn(account, balance);
-        emit Burn(account, balance);
+        burn(account, balance);
+
+        _skipBlacklistCheck = false; // Reset flag
     }
 
     /**
@@ -184,7 +163,6 @@ contract USDS is
         _unpause();
     }
 
-
     /**
      * @dev Transfers `amount` tokens from `sender` to `recipient` using the allowance mechanism.
      * `amount` is then deducted from the caller's allowance.
@@ -200,18 +178,7 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address spender = _msgSender();
-        require(
-            !isBlacklisted(spender),
-            "Spender address is blacklisted"
-        );
-        require(
-            !isBlacklisted(from),
-            "Sender address is blacklisted"
-        );
-        require(
-            value != 0,
-            "Transfer amount must be greater than zero"
-        );
+        require(value != 0, "Transfer amount must be greater than zero");
         _spendAllowance(from, spender, value);
         _transfer(from, to, value);
         return true;
@@ -228,10 +195,6 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address owner = _msgSender();
-        require(
-            !isBlacklisted(owner),
-            "Sender address is blacklisted"
-        );
         _transfer(owner, to, value);
         return true;
     }
@@ -245,7 +208,6 @@ contract USDS is
         address to,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(to), "Minting failed: recipient address is blacklisted");
         validateProofOfReserve(amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
@@ -260,14 +222,15 @@ contract USDS is
         address[] memory toAddresses,
         uint256[] memory amounts
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(toAddresses.length == amounts.length, "Address array and amount array length must match");
+        require(
+            toAddresses.length == amounts.length,
+            "Address array and amount array length must match"
+        );
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
             address to = toAddresses[i];
             uint256 amount = amounts[i];
             totalAmount += amount;
-
-            require(!isBlacklisted(to), "Minting failed: recipient address is blacklisted");
 
             _mint(to, amount);
             emit Mint(to, amount);
@@ -284,12 +247,9 @@ contract USDS is
         address from,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(from), "Burn not allowed from blacklisted address");
-        require(reserveAddresses[from], "Burn only allowed from a reserve address");
         _burn(from, amount);
         emit Burn(from, amount);
     }
-
 
     /**
      * @dev Returns the number of decimals used by the token.
@@ -302,15 +262,6 @@ contract USDS is
         returns (uint8)
     {
         return 6;
-    }
-
-    /**
-     * @dev Checks if an address is a reserve address.
-     * @param account The address to be checked.
-     * @return A boolean indicating whether the address is a reserve address or not.
-     */
-    function isReserveAddress(address account) public view returns (bool) {
-        return reserveAddresses[account];
     }
 
     /**
@@ -332,11 +283,11 @@ contract USDS is
         returns (uint256 reserve, uint256 updatedAt)
     {
         (
-            /* uint80 roundID */,
-            int reserveFunds,
-            /* uint startedAt */,
-            uint roundTimeStamp,
-            /* uint80 answeredInRound */
+            ,
+            /* uint80 roundID */ int reserveFunds,
+            ,
+            /* uint startedAt */ uint roundTimeStamp /* uint80 answeredInRound */,
+
         ) = proofOfReserveFeed.latestRoundData();
 
         reserve = uint256(reserveFunds);
@@ -365,18 +316,24 @@ contract USDS is
      * @param mintAmount The amount of tokens to be minted.
      * @param isBatch A boolean indicating whether the mint is a batch mint or not.
      */
-    function validateProofOfReserve(uint256 mintAmount, bool isBatch) internal view {
+    function validateProofOfReserve(
+        uint256 mintAmount,
+        bool isBatch
+    ) internal view {
         (uint256 reserves, uint256 reserveUpdateAt) = getLatestReserve();
 
         require(reserves > 0, "Invalid data from PoR feed");
         require(
-            block.timestamp <= reserveUpdateAt + acceptableProofOfReserveTimeDelay,
+            block.timestamp <=
+                reserveUpdateAt + acceptableProofOfReserveTimeDelay,
             "Proof of reserve is out of date"
         );
         // For batching, we did the mints before validations
         // So we only need to check if the total supply is less than or equal to reserves
         require(
-            isBatch ? totalSupply() <= reserves : totalSupply() + mintAmount <= reserves,
+            isBatch
+                ? totalSupply() <= reserves
+                : totalSupply() + mintAmount <= reserves,
             "Total supply + requested mint amount exceeds available reserves"
         );
     }
@@ -405,7 +362,7 @@ contract USDS is
     {
         // This will trigger the ERC20PausableUpgradeable._update
         // enforcing the pausable feature and then
-        // will trigger the Blacklistable._update 
+        // will trigger the Blacklistable._update
         // since ERC20PausableUpgradeable is inherited after Blacklistable
         // This won't trigger the ERC20Upgradeable._update
         // since we are not calling super._update in Blacklistable._update
