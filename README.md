@@ -33,7 +33,6 @@ UPGRADER_ADDRESS=<...>
 ADMIN_ADDRESS=<...>
 BLACKLISTER_ADDRESS=<...>
 RESCUER_ADDRESS=<...>
-RESERVE_ADDRESSES=<...,...,...>
 PROOF_FEED_ADDRESS=<...>
 ```
 You can target any network from your Hardhat config using:

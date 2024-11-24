@@ -1,6 +1,6 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
 describe("USDS pause", function () {
@@ -45,7 +45,6 @@ describe("USDS pause", function () {
         blacklister.address,
         withdrawer.address,
         dummyAggregatorAddress,
-        [reserve.address],
       ],
       { kind: "uups" }
     );

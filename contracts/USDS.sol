@@ -11,7 +11,6 @@ import { ERC20PermitUpgradeable }
         from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
-
 /// @title Official USDS ERC-20 Implementation
 /// @custom:security-contact support@bitgo.com
 contract USDS is
@@ -32,15 +31,15 @@ contract USDS is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
-    mapping(address => bool) public reserveAddresses;
     uint256 public acceptableProofOfReserveTimeDelay;
+    uint256 public mintCapPerTransaction;
 
     event Burn(address indexed from, uint256 amount);
     event Mint(address indexed to, uint256 amount);
-    event ReserveAddressAdded(address indexed newAddress);
-    event ReserveAddressRemoved(address indexed oldAddress);
     event ProofOfReserveFeedSet(address newFeed);
     event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
+    event MintCapPerTransactionSet(uint256 newLimit);
+    event TokensRescued(address indexed token, address indexed recipient, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -56,7 +55,6 @@ contract USDS is
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
      * @param proofOfReserveAddress The address of the PoR feed.
-     * @param _reserveAddresses An array of reserve addresses.
      */
     function initialize(
         address defaultAdmin,
@@ -65,8 +63,7 @@ contract USDS is
         address upgrader,
         address blacklister,
         address rescuer,
-        address proofOfReserveAddress,
-        address[] memory _reserveAddresses
+        address proofOfReserveAddress
     ) public initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
@@ -79,16 +76,15 @@ contract USDS is
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
-        for (uint256 i = 0; i < _reserveAddresses.length; i++) {
-            require(_reserveAddresses[i] != address(0), "Cannot add zero address as a reserve address");
-            reserveAddresses[_reserveAddresses[i]] = true;
-            emit ReserveAddressAdded(_reserveAddresses[i]);
-        }
-        require(proofOfReserveAddress != address(0), "Cannot add zero address as a proof of reserve feed");
+        require(proofOfReserveAddress != address(0), "Invalid PoR address");
         proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
-        acceptableProofOfReserveTimeDelay = 3 hours;
-        emit AcceptableProofOfReserveDelaySet(acceptableProofOfReserveTimeDelay);
+        acceptableProofOfReserveTimeDelay = 24 hours;
+        emit AcceptableProofOfReserveDelaySet(
+            acceptableProofOfReserveTimeDelay
+        );
+        mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
+        emit MintCapPerTransactionSet(mintCapPerTransaction);
     }
 
     /**
@@ -100,8 +96,13 @@ contract USDS is
     function setProofOfReserveFeed(
         address newFeedAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newFeedAddress != address(0), "Cannot add zero address as a proof of reserve feed");
-        proofOfReserveFeed = AggregatorV3Interface(newFeedAddress);
+        require(newFeedAddress != address(0), "Invalid PoR address");
+
+        // verify feed is not stale before updating the feed address
+        AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
+        validateProofOfReserve(newFeed, 0, false);
+
+        proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -114,32 +115,23 @@ contract USDS is
     function setAcceptableProofOfReserveTimeDelay(
         uint256 newTimeDelay
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newTimeDelay > 0, "Time delay must be greater than zero");
+        require(newTimeDelay > 0, "Delay must be > 0");
         acceptableProofOfReserveTimeDelay = newTimeDelay;
         emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
     /**
-     * @dev Adds a reserve address.
-     * @param newAddress The address to be added as a reserve address.
+     * @dev Sets the mint cap per transaction.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param newLimit The new maximum limit per transaction for mint.
      */
-    function addReserveAddress(
-        address newAddress
+    function setMintCapPerTransaction(
+        uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newAddress != address(0), "Cannot add zero address as a reserve address");
-        reserveAddresses[newAddress] = true;
-        emit ReserveAddressAdded(newAddress);
-    }
-
-    /**
-     * @dev Removes a reserve address.
-     * @param oldAddress The address to be removed from the reserve addresses.
-     */
-    function removeReserveAddress(
-        address oldAddress
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        reserveAddresses[oldAddress] = false;
-        emit ReserveAddressRemoved(oldAddress);
+        require(newLimit > 0, "Mint cap must be > 0");
+        mintCapPerTransaction = newLimit;
+        emit MintCapPerTransactionSet(newLimit);
     }
 
     /**
@@ -149,7 +141,7 @@ contract USDS is
     function destroyBlacklistedFunds(
         address account
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(isBlacklisted(account), "Address is not blacklisted");
+        require(isBlacklisted(account), "Sender is not blacklisted");
         uint256 balance = balanceOf(account);
         _burn(account, balance);
         emit Burn(account, balance);
@@ -166,8 +158,11 @@ contract USDS is
         address recipient,
         uint256 amount
     ) external onlyRole(RESCUER_ROLE) {
-        require(!isBlacklisted(recipient), "Recipient is blacklisted");
+        require(recipient != address(0), "Invalid recipient");
+        require(amount > 0, "Invalid amount");
+        require(!isBlacklisted(recipient), "Recipient blacklisted");
         token.safeTransfer(recipient, amount);
+        emit TokensRescued(address(token), recipient, amount);
     }
 
     /**
@@ -184,7 +179,6 @@ contract USDS is
         _unpause();
     }
 
-
     /**
      * @dev Transfers `amount` tokens from `sender` to `recipient` using the allowance mechanism.
      * `amount` is then deducted from the caller's allowance.
@@ -200,18 +194,9 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address spender = _msgSender();
-        require(
-            !isBlacklisted(spender),
-            "Spender address is blacklisted"
-        );
-        require(
-            !isBlacklisted(from),
-            "Sender address is blacklisted"
-        );
-        require(
-            value != 0,
-            "Transfer amount must be greater than zero"
-        );
+        require(!isBlacklisted(spender), "Spender is blacklisted");
+        require(!isBlacklisted(from), "Sender is blacklisted");
+        require(value != 0, "Amount must be > 0");
         _spendAllowance(from, spender, value);
         _transfer(from, to, value);
         return true;
@@ -219,6 +204,8 @@ contract USDS is
 
     /**
      * @dev Transfers tokens from the caller's account to another account.
+     * Zero-value transfers are permitted to align with the ERC-20 standard
+     * and to trigger certain event logs or off-chain workflows without transferring tokens.
      * @param to The address to transfer tokens to.
      * @param value The amount of tokens to transfer.
      * @return A boolean value indicating whether the transfer was successful or not.
@@ -228,16 +215,17 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address owner = _msgSender();
-        require(
-            !isBlacklisted(owner),
-            "Sender address is blacklisted"
-        );
+        require(!isBlacklisted(owner), "Sender is blacklisted");
         _transfer(owner, to, value);
         return true;
     }
 
     /**
      * @dev Mints new tokens and assigns them to an address.
+     * Zero-value minting is permitted to ensure compatibility with off-chain workflows or systems
+     * where the action of minting might need to be logged or executed without an actual token amount.
+     * This flexibility avoids unnecessary reverts in cases where the minting operation is
+     * initiated programmatically or for testing purposes.
      * @param to The address to which the new tokens will be minted.
      * @param amount The amount of tokens to be minted.
      */
@@ -245,8 +233,12 @@ contract USDS is
         address to,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(to), "Minting failed: recipient address is blacklisted");
-        validateProofOfReserve(amount, false);
+        require(!isBlacklisted(to), "Recipient is blacklisted");
+        require(
+            amount <= mintCapPerTransaction,
+            "Exceeds mint transaction cap"
+        );
+        validateProofOfReserve(proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -260,19 +252,22 @@ contract USDS is
         address[] memory toAddresses,
         uint256[] memory amounts
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(toAddresses.length == amounts.length, "Address array and amount array length must match");
+        require(
+            toAddresses.length == amounts.length,
+            "Array lengths must match"
+        );
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            address to = toAddresses[i];
-            uint256 amount = amounts[i];
-            totalAmount += amount;
-
-            require(!isBlacklisted(to), "Minting failed: recipient address is blacklisted");
-
-            _mint(to, amount);
-            emit Mint(to, amount);
+            require(
+                amounts[i] <= mintCapPerTransaction,
+                "Exceeds mint transaction cap"
+            );
+            require(!isBlacklisted(toAddresses[i]), "Recipient is blacklisted");
+            totalAmount += amounts[i];
+            _mint(toAddresses[i], amounts[i]);
+            emit Mint(toAddresses[i], amounts[i]);
         }
-        validateProofOfReserve(totalAmount, true);
+        validateProofOfReserve(proofOfReserveFeed, totalAmount, true);
     }
 
     /**
@@ -284,12 +279,10 @@ contract USDS is
         address from,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(from), "Burn not allowed from blacklisted address");
-        require(reserveAddresses[from], "Burn only allowed from a reserve address");
+        require(!isBlacklisted(from), "Sender is blacklisted");
         _burn(from, amount);
         emit Burn(from, amount);
     }
-
 
     /**
      * @dev Returns the number of decimals used by the token.
@@ -302,15 +295,6 @@ contract USDS is
         returns (uint8)
     {
         return 6;
-    }
-
-    /**
-     * @dev Checks if an address is a reserve address.
-     * @param account The address to be checked.
-     * @return A boolean indicating whether the address is a reserve address or not.
-     */
-    function isReserveAddress(address account) public view returns (bool) {
-        return reserveAddresses[account];
     }
 
     /**
@@ -331,16 +315,7 @@ contract USDS is
         view
         returns (uint256 reserve, uint256 updatedAt)
     {
-        (
-            /* uint80 roundID */,
-            int reserveFunds,
-            /* uint startedAt */,
-            uint roundTimeStamp,
-            /* uint80 answeredInRound */
-        ) = proofOfReserveFeed.latestRoundData();
-
-        reserve = uint256(reserveFunds);
-        updatedAt = roundTimeStamp;
+        (reserve, updatedAt) = getLatestReserveFromFeed(proofOfReserveFeed);
     }
 
     /**
@@ -362,23 +337,76 @@ contract USDS is
 
     /**
      * @dev Validates the proof of reserve.
+     * @param feed The address of the proofOfReserveFeed contract.
      * @param mintAmount The amount of tokens to be minted.
      * @param isBatch A boolean indicating whether the mint is a batch mint or not.
      */
-    function validateProofOfReserve(uint256 mintAmount, bool isBatch) internal view {
-        (uint256 reserves, uint256 reserveUpdateAt) = getLatestReserve();
+    function validateProofOfReserve(
+        AggregatorV3Interface feed,
+        uint256 mintAmount,
+        bool isBatch
+    ) internal view {
+        (uint256 reserves, uint256 reserveUpdateAt) = getLatestReserveFromFeed(
+            feed
+        );
+        require(reserves > 0, "Invalid PoR data");
+        require(
+            block.timestamp <=
+                reserveUpdateAt + acceptableProofOfReserveTimeDelay,
+            "PoR outdated"
+        );
 
-        require(reserves > 0, "Invalid data from PoR feed");
+       
+        // Normalize currencies to in case the number 
+        // of decimals reported by the feed is
+        // different than the token's decimals
+        uint256 currentSupply = totalSupply();
+        uint8 trueDecimals = decimals();
+        uint8 reserveDecimals = feed.decimals();
+        require(reserveDecimals <= 18, "Invalid decimals");
+        if (trueDecimals < reserveDecimals) {
+            currentSupply =
+                currentSupply *
+                10**uint256(reserveDecimals - trueDecimals);
+            mintAmount = mintAmount * 
+                10**uint256(reserveDecimals - trueDecimals);
+        } else if (trueDecimals > reserveDecimals) {
+            reserves = reserves * 10**uint256(trueDecimals - reserveDecimals);
+        }
+
+        // For batched minting, the mint operation is performed before validation.
+        // As a result, the minted amount is already included in `totalSupply` at this point.
+        // Therefore, in batch mode (`isBatch`), we only need to verify that `totalSupply`
+        // does not exceed the available `reserves`.
+        // In non-batch mode, the `mintAmount` is not yet included in `totalSupply`,
+        // so we need to ensure that `totalSupply + mintAmount` stays within `reserves`.
         require(
-            block.timestamp <= reserveUpdateAt + acceptableProofOfReserveTimeDelay,
-            "Proof of reserve is out of date"
+            isBatch
+                ? currentSupply <= reserves
+                : currentSupply + mintAmount <= reserves,
+            "Supply exceeds reserves"
         );
-        // For batching, we did the mints before validations
-        // So we only need to check if the total supply is less than or equal to reserves
-        require(
-            isBatch ? totalSupply() <= reserves : totalSupply() + mintAmount <= reserves,
-            "Total supply + requested mint amount exceeds available reserves"
-        );
+    }
+
+    /**
+     * @dev Retrieves the latest reserve value from the specified proofOfReserveFeed.
+     * @param feed The address of the proofOfReserveFeed contract.
+     * @return reserve The latest reserve value as a uint256.
+     * @return updatedAt The timestamp of the latest reserve value.
+     */
+    function getLatestReserveFromFeed(
+        AggregatorV3Interface feed
+    ) internal view returns (uint256 reserve, uint256 updatedAt) {
+        (
+            /* uint80 roundID */,
+            int reserveFunds,
+            /* uint startedAt */,
+            uint roundTimeStamp,
+            /* uint80 answeredInRound */
+        ) = feed.latestRoundData();
+
+        reserve = uint256(reserveFunds);
+        updatedAt = roundTimeStamp;
     }
 
     /**
@@ -405,7 +433,7 @@ contract USDS is
     {
         // This will trigger the ERC20PausableUpgradeable._update
         // enforcing the pausable feature and then
-        // will trigger the Blacklistable._update 
+        // will trigger the Blacklistable._update
         // since ERC20PausableUpgradeable is inherited after Blacklistable
         // This won't trigger the ERC20Upgradeable._update
         // since we are not calling super._update in Blacklistable._update
