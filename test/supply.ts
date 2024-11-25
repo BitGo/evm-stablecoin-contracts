@@ -1,9 +1,9 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DummyAggregatorV3, USDS } from "../typechain-types";
 
-describe("USDS Minting and Burning", function () {
+describe("USDS Minting,  Burning And Token Rescue", function () {
   let contractInstance: USDS;
   let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
@@ -55,7 +55,6 @@ describe("USDS Minting and Burning", function () {
         blacklister.address,
         rescuer.address,
         dummyAggregatorAddress,
-        [reserve1.address, reserve2.address, reserve3.address],
       ],
       { kind: "uups" }
     );
@@ -69,16 +68,49 @@ describe("USDS Minting and Burning", function () {
     expect(paused).to.be.false;
   });
 
-  it("Should correctly identify reserve addresses", async function () {
-    const isReserve1 = await contractInstance.isReserveAddress(
-      reserve1.address
-    );
-    const isReserve2 = await contractInstance.isReserveAddress(
-      reserve2.address
-    );
+  it("Should fail to mint tokens exceeding max mint limit", async function () {
+    // Set mint amount greater than the maxMintLimit
+    const mintAmount = ethers.parseUnits("2000000", 18); // 2 million tokens (assuming maxMintLimit is 1 million)
 
-    expect(isReserve1).to.be.true;
-    expect(isReserve2).to.be.true;
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(mintAmount, 1, timeStampInSeconds, 1);
+
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .mint(randomAddress.address, mintAmount)
+    ).to.be.revertedWith("Exceeds mint transaction cap");
+  });
+
+  it("Should update the max mint limit successfully through setter function", async function () {
+    const newPerTransactionCap = ethers.parseUnits("2000000", 18); // 2 million tokens
+
+    // Update the max mint limit using the setter function
+    await expect(contractInstance
+      .connect(defaultAdmin)
+      .setMintCapPerTransaction(newPerTransactionCap)
+    )
+      .to.emit(contractInstance, "MintCapPerTransactionSet")
+      .withArgs(newPerTransactionCap)
+
+    const currentMaxMintLimit = await contractInstance.mintCapPerTransaction();
+    expect(currentMaxMintLimit).to.equal(newPerTransactionCap);
+
+    // Attempt to mint exceeding the updated limit and expect it to fail
+    const exceedingMintAmount = ethers.parseUnits("2500000", 18); // 2.5 million tokens
+    await expect(
+      contractInstance.connect(supplyController).mint(randomAddress.address, exceedingMintAmount)
+    ).to.be.revertedWith("Exceeds mint transaction cap");
+  });
+
+  it("Should fail to update the max mint limit to zero", async function () {
+    const zeroCap = ethers.parseUnits("0", 18); // Zero tokens
+
+    // Attempt to update the max mint limit to zero and expect it to fail
+    await expect(
+      contractInstance.connect(defaultAdmin).setMintCapPerTransaction(zeroCap)
+    ).to.be.revertedWith("Mint cap must be > 0");
   });
 
   it("Should mint tokens successfully to any external address", async function () {
@@ -127,19 +159,21 @@ describe("USDS Minting and Burning", function () {
     // Recover the tokens
     await expect(
       contractInstance
-        .connect(rescuer)
-        .rescueTokens(
-          contractInstance.getAddress(),
-          recoverAddress.address,
-          transferAmount
-        )
-    )
-      .to.emit(contractInstance, "Transfer")
-      .withArgs(
+      .connect(rescuer)
+      .rescueTokens(
         contractInstance.getAddress(),
         recoverAddress.address,
         transferAmount
-      );
+      )
+    )
+      .to.emit(contractInstance, "Transfer")
+      .withArgs(
+      contractInstance.getAddress(),
+      recoverAddress.address,
+      transferAmount
+      )
+      .to.emit(contractInstance, "TokensRescued")
+      .withArgs(contractInstance.getAddress(), recoverAddress.address, transferAmount);
     const newTokenContractBalance = await contractInstance.balanceOf(
       contractInstance.getAddress()
     );
@@ -149,8 +183,74 @@ describe("USDS Minting and Burning", function () {
     );
     expect(balanceAtRecoverAddress).to.equal(transferAmount);
   });
+  
+  it("Should fail to rescue tokens when called by unauthorized address", async function() {
+    const transferAmount = ethers.parseUnits("1000", 18);
+  
+    await expect(
+      contractInstance.connect(randomAddress).rescueTokens(
+        contractInstance.getAddress(),
+        recoverAddress.address,
+        transferAmount  
+      )
+    ).to.be.reverted;
+  });
+  
+  it("Should fail to rescue tokens to address zero", async function() {
+    const transferAmount = ethers.parseUnits("1000", 18);
+  
+    await expect(
+      contractInstance.connect(rescuer).rescueTokens(
+        contractInstance.getAddress(), 
+        addressZero,
+        transferAmount
+      )
+    ).to.be.revertedWith("Invalid recipient");
+  });
+  
+  it("Should fail to rescue zero tokens", async function() {
+    await expect(
+      contractInstance.connect(rescuer).rescueTokens(
+        contractInstance.getAddress(),
+        recoverAddress.address,
+        0
+      )
+    ).to.be.revertedWith("Invalid amount");
+  });
+  
+  it("Should fail to rescue tokens to blacklisted address", async function() {
+    const transferAmount = ethers.parseUnits("1000", 18);
+    
+    // Blacklist the recipient address
+    await contractInstance.connect(blacklister).blacklist(recoverAddress.address);
+  
+    await expect(
+      contractInstance.connect(rescuer).rescueTokens(
+        contractInstance.getAddress(),
+        recoverAddress.address,
+        transferAmount
+      )
+    ).to.be.revertedWith("Recipient blacklisted");
+    await contractInstance.connect(blacklister).unblacklist(recoverAddress.address);
+  });
+  
 
-  it("Should burn tokens successfully from reserve1", async function () {
+  it("Should fail to mint tokens when called by unauthorized address", async function () {
+    const mintAmount = ethers.parseUnits("1000", 18);
+    let failed = false;
+    try {
+      // Attempt to mint tokens by an unauthorized signer (e.g., defaultAdmin)
+      await contractInstance
+        .connect(defaultAdmin)
+        .mint(reserve1.address, mintAmount);
+    } catch (error) {
+      failed = true;
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+  });
+
+  it("Should burn tokens successfully from an address", async function () {
     const burnAmount = ethers.parseUnits("500", 18);
     let totalSupply = await contractInstance.totalSupply();
     await dummyAggregatorInstance
@@ -176,40 +276,6 @@ describe("USDS Minting and Burning", function () {
     expect(await contractInstance.totalSupply()).to.equal(
       totalSupply - burnAmount
     );
-  });
-
-  it("Should fail to burn tokens from a non-reserve address", async function () {
-    const burnAmount = ethers.parseUnits("500", 18);
-    let failed = false;
-    try {
-      // Attempt to burn tokens from a non-reserve address (e.g., freezer)
-      await contractInstance
-        .connect(supplyController)
-        .burn(freezer.address, burnAmount);
-    } catch (error) {
-      failed = true;
-      expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Burn only allowed from a reserve address'"
-      );
-
-      expect(error).to.be.an("error");
-    }
-    expect(failed).to.be.true;
-  });
-
-  it("Should fail to mint tokens when called by unauthorized address", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
-    let failed = false;
-    try {
-      // Attempt to mint tokens by an unauthorized signer (e.g., defaultAdmin)
-      await contractInstance
-        .connect(defaultAdmin)
-        .mint(reserve1.address, mintAmount);
-    } catch (error) {
-      failed = true;
-      expect(error).to.be.an("error");
-    }
-    expect(failed).to.be.true;
   });
 
   it("Should fail to burn tokens when called by unauthorized address", async function () {
@@ -242,46 +308,136 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Total supply + requested mint amount exceeds available reserves'"
+        "VM Exception while processing transaction: reverted with reason string 'Supply exceeds reserves'"
       );
       expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
   });
 
+  it("Should handle decimal normalization correctly when PoR decimals are higher than token decimals", async function() {
+    const mintAmount = ethers.parseUnits("1000", 6); // Token has 6 decimals
+    const totalSupply = await contractInstance.totalSupply();
+    
+    // Deploy new PoR feed with 18 decimals (higher than token's 6 decimals)
+    const newPoRFeed = await ethers.getContractFactory("DummyAggregatorV3"); 
+    const newPoRFeedContract = await newPoRFeed.deploy(18, "High decimal PoR", 1);
+    
+    // Set reserve amount in 18 decimals (need to scale up token amount)
+    const scaledReserveAmount =  (mintAmount + totalSupply)  * BigInt(10**12); 
+    
+    await newPoRFeedContract
+      .connect(supplyController)
+      .updateData(scaledReserveAmount, 1, timeStampInSeconds, 1);
+      
+    await contractInstance
+      .connect(defaultAdmin)
+      .setProofOfReserveFeed(newPoRFeedContract.getAddress());
+  
+    // Mint should succeed since reserves are properly scaled
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .mint(randomAddress.address, mintAmount)
+    ).to.emit(contractInstance, "Mint")
+     .withArgs(randomAddress.address, mintAmount);
+  });
+  
+  it("Should handle decimal normalization correctly when PoR decimals are lower than token decimals", async function() {
+    const mintAmount = ethers.parseUnits("1000", 6); // Token has 6 decimals
+    const totalSupply = await contractInstance.totalSupply();
+  
+    // Deploy new PoR feed with 3 decimals (lower than token's 6 decimals) 
+    const newPoRFeed = await ethers.getContractFactory("DummyAggregatorV3");
+    const newPoRFeedContract = await newPoRFeed.deploy(3, "Low decimal PoR", 1);
+  
+    // Set reserve amount in 3 decimals (need to scale up reserves)
+    const reserveAmount = (totalSupply + mintAmount) / BigInt(10**3);
+  
+    await newPoRFeedContract
+      .connect(supplyController)
+      .updateData(reserveAmount, 1, timeStampInSeconds, 1);
+      
+    await contractInstance
+      .connect(defaultAdmin)
+      .setProofOfReserveFeed(newPoRFeedContract.getAddress());
+  
+    // Mint should succeed since reserves are properly scaled
+    await expect(
+      contractInstance
+        .connect(supplyController) 
+        .mint(randomAddress.address, mintAmount)
+    ).to.emit(contractInstance, "Mint")
+     .withArgs(randomAddress.address, mintAmount);
+  });
+  
+  it("Should fail mint when reserves are insufficient after decimal normalization", async function() {
+    const mintAmount = ethers.parseUnits("1000", 6); // Token has 6 decimals
+    const totalSupply = await contractInstance.totalSupply();
+  
+    // Deploy new PoR feed with 18 decimals
+    const newPoRFeed = await ethers.getContractFactory("DummyAggregatorV3");
+    const newPoRFeedContract = await newPoRFeed.deploy(18, "High decimal PoR", 1);
+  
+    // Set reserve amount in 18 decimals but insufficient after normalization
+    const insufficientReserves = (totalSupply * BigInt(10**12)) + (mintAmount * BigInt(10**11)); // One order of magnitude too low
+  
+    await newPoRFeedContract
+      .connect(supplyController)
+      .updateData(insufficientReserves, 1, timeStampInSeconds, 1);
+      
+    await contractInstance
+      .connect(defaultAdmin)
+      .setProofOfReserveFeed(newPoRFeedContract.getAddress());
+  
+    // Mint should fail since normalized reserves are insufficient
+    await expect(
+      contractInstance
+        .connect(supplyController)
+        .mint(randomAddress.address, mintAmount)
+    ).to.be.revertedWith("Supply exceeds reserves");
+  });
+
   it("Should fail to mint tokens when proof of reserve feed is outdated", async function () {
     const mintAmount = ethers.parseUnits("1000", 18);
     let failed = false;
     const totalSupply = await contractInstance.totalSupply();
-    // Default delay proof of reserve time delay is 3 hours
+    // Default delay proof of reserve time delay is 24 hours
     await dummyAggregatorInstance
       .connect(supplyController)
-      .updateData(totalSupply + mintAmount, 1, timeStampInSeconds - 10800, 1); // Delay proof of reserve by 3 hours
+      .updateData(totalSupply + mintAmount, 1, timeStampInSeconds, 1); // Delay proof of reserve by 24 hours
+    await contractInstance
+    .connect(defaultAdmin)
+    .setProofOfReserveFeed(dummyAggregatorInstance.getAddress());
+    
     try {
-      // Attempt to mint tokens when proof of reserve feed is more than 3 hours outdated
+      await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply + mintAmount, 1, timeStampInSeconds - 86400, 1); 
+      // Attempt to mint tokens when proof of reserve feed is more than 24 hours outdated
       await contractInstance
         .connect(supplyController)
         .mint(reserve1.address, mintAmount);
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Proof of reserve is out of date'"
+        "VM Exception while processing transaction: reverted with reason string 'PoR outdated'"
       );
       expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
 
-    // Reset proof of reserve time delay to 4 hours
+    // Reset proof of reserve time delay to 25 hours
     await expect(
       contractInstance
         .connect(defaultAdmin)
-        .setAcceptableProofOfReserveTimeDelay(14400)
+        .setAcceptableProofOfReserveTimeDelay(90000)
     )
       .to.emit(contractInstance, "AcceptableProofOfReserveDelaySet")
-      .withArgs(14400);
+      .withArgs(90000);
     const proofOfReserveTimeDelay =
       await contractInstance.acceptableProofOfReserveTimeDelay();
-    expect(proofOfReserveTimeDelay).to.equal(14400);
+    expect(proofOfReserveTimeDelay).to.equal(90000);
 
     // Attempt to mint tokens when proof of reserve feed is not outdated
     const balance = await contractInstance.balanceOf(reserve1.address);
@@ -301,7 +457,7 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Time delay must be greater than zero'"
+        "VM Exception while processing transaction: reverted with reason string 'Delay must be > 0'"
       );
       expect(error).to.be.an("error");
     }
@@ -316,18 +472,23 @@ describe("USDS Minting and Burning", function () {
       1
     );
     const newProofFeedAddress = await newProofFeedContract.getAddress();
+    let totalSupply = await contractInstance.totalSupply();
+    await newProofFeedContract
+      .connect(supplyController)
+      .updateData(totalSupply, 1, timeStampInSeconds, 1);
     await contractInstance
       .connect(defaultAdmin)
       .setProofOfReserveFeed(newProofFeedAddress);
     const currentProofFeed = await contractInstance.getProofOfReserveFeed();
     expect(currentProofFeed).to.equal(newProofFeedAddress);
+    ++totalSupply;
     await newProofFeedContract
       .connect(supplyController)
-      .updateData(1234, 1, timeStampInSeconds, 1);
+      .updateData(totalSupply, 1, timeStampInSeconds, 1);
     const [proofFeedData] = await contractInstance
       .connect(defaultAdmin)
       .getLatestReserve();
-    expect(proofFeedData).to.equal(1234);
+    expect(proofFeedData).to.equal(totalSupply);
 
     // Should error out if proof of address set to zero address
     let failed = false;
@@ -338,12 +499,15 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Cannot add zero address as a proof of reserve feed'"
+        "VM Exception while processing transaction: reverted with reason string 'Invalid PoR address'"
       );
       expect(error).to.be.an("error");
     }
     expect(failed).to.be.true;
     // setting state back as is
+    await dummyAggregatorInstance
+      .connect(supplyController)
+      .updateData(totalSupply, 1, timeStampInSeconds, 1);
     await expect(
       contractInstance
         .connect(defaultAdmin)
@@ -351,6 +515,67 @@ describe("USDS Minting and Burning", function () {
     )
       .to.emit(contractInstance, "ProofOfReserveFeedSet")
       .withArgs(dummyAggregatorInstance.getAddress());
+  });
+
+  it("Should not allow setting PoR feed with decimals greater than 18", async function() {
+    const newProofFeed = await ethers.getContractFactory("DummyAggregatorV3");
+    const newPoRFeedContract = await newProofFeed.deploy(
+      19, // 19 decimals (greater than 18)
+      "Invalid decimal PoR feed",
+      1
+    );
+    const newPoRFeedAddress = await newPoRFeedContract.getAddress();
+    const totalSupply = await contractInstance.totalSupply();
+  
+    // Set some valid reserve data for the new feed
+    await newPoRFeedContract
+      .connect(supplyController)
+      .updateData(totalSupply, 1, timeStampInSeconds, 1);
+  
+    // Attempt to set the new feed with invalid decimals
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(newPoRFeedAddress)
+    ).to.be.revertedWith("Invalid decimals");
+  
+    // Verify that feed was not updated
+    const currentFeed = await contractInstance.getProofOfReserveFeed();
+    expect(currentFeed).to.not.equal(newPoRFeedAddress);
+  });
+
+  it("Should revert if the new proof of reserve feed data is stale", async function () {
+    const newProofFeed = await ethers.getContractFactory("DummyAggregatorV3");
+    const newProofFeedContract = await newProofFeed.deploy(
+      6,
+      "New proof feed",
+      1
+    );
+    const newProofFeedAddress = await newProofFeedContract.getAddress();
+
+    // Simulate stale data by setting a timestamp older than the acceptable delay
+    const staleTimestamp = timeStampInSeconds - 90000; // 25 hours
+    await newProofFeedContract
+      .connect(supplyController)
+      .updateData(12345, 1, staleTimestamp, 1);
+
+    let failed = false;
+    try {
+      await contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(newProofFeedAddress);
+    } catch (error) {
+      failed = true;
+      expect((error as Error).message).to.equal(
+        "VM Exception while processing transaction: reverted with reason string 'PoR outdated'"
+      );
+      expect(error).to.be.an("error");
+    }
+    expect(failed).to.be.true;
+
+    // Verify that the proof of reserve feed remains unchanged
+    const currentProofFeed = await contractInstance.getProofOfReserveFeed();
+    expect(currentProofFeed).to.not.equal(newProofFeedAddress);
   });
 
   it("Should mint tokens successfully in batch to multiple external addresses", async function () {
@@ -435,7 +660,7 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Total supply + requested mint amount exceeds available reserves'"
+        "VM Exception while processing transaction: reverted with reason string 'Supply exceeds reserves'"
       );
       expect(error).to.be.an("error");
     }
@@ -466,56 +691,11 @@ describe("USDS Minting and Burning", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Address array and amount array length must match'"
+        "VM Exception while processing transaction: reverted with reason string 'Array lengths must match'"
       );
       expect(error).to.be.an("error");
     }
 
     expect(failed).to.be.true;
-  });
-
-  it("Should add a reserve address successfully", async function () {
-    const newReserveAddress = "0x1234567890123456789012345678901234567890";
-    await expect(
-      contractInstance
-        .connect(defaultAdmin)
-        .addReserveAddress(newReserveAddress)
-    )
-      .to.emit(contractInstance, "ReserveAddressAdded")
-      .withArgs(newReserveAddress);
-    const isReserveAddress =
-      await contractInstance.isReserveAddress(newReserveAddress);
-    expect(isReserveAddress).to.be.true;
-  });
-
-  it("Should throw an error when trying to add a zero address as a reserve address", async function () {
-    let failed = false;
-    try {
-      await contractInstance
-        .connect(defaultAdmin)
-        .addReserveAddress(addressZero);
-    } catch (error) {
-      failed = true;
-      expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Cannot add zero address as a reserve address'"
-      );
-      expect(error).to.be.an("error");
-    }
-    expect(failed).to.be.true;
-  });
-
-  it("Should remove a reserve address successfully", async function () {
-    const reserveAddressToRemove = reserve1.address;
-    await expect(
-      contractInstance
-        .connect(defaultAdmin)
-        .removeReserveAddress(reserveAddressToRemove)
-    )
-      .to.emit(contractInstance, "ReserveAddressRemoved")
-      .withArgs(reserveAddressToRemove);
-    const isReserveAddress = await contractInstance.isReserveAddress(
-      reserveAddressToRemove
-    );
-    expect(isReserveAddress).to.be.false;
   });
 });
