@@ -343,34 +343,6 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
      .withArgs(randomAddress.address, mintAmount);
   });
   
-  it("Should handle decimal normalization correctly when PoR decimals are lower than token decimals", async function() {
-    const mintAmount = ethers.parseUnits("1000", 6); // Token has 6 decimals
-    const totalSupply = await contractInstance.totalSupply();
-  
-    // Deploy new PoR feed with 3 decimals (lower than token's 6 decimals) 
-    const newPoRFeed = await ethers.getContractFactory("DummyAggregatorV3");
-    const newPoRFeedContract = await newPoRFeed.deploy(3, "Low decimal PoR", 1);
-  
-    // Set reserve amount in 3 decimals (need to scale up reserves)
-    const reserveAmount = (totalSupply + mintAmount) / BigInt(10**3);
-  
-    await newPoRFeedContract
-      .connect(supplyController)
-      .updateData(reserveAmount, 1, timeStampInSeconds, 1);
-      
-    await contractInstance
-      .connect(defaultAdmin)
-      .setProofOfReserveFeed(newPoRFeedContract.getAddress());
-  
-    // Mint should succeed since reserves are properly scaled
-    await expect(
-      contractInstance
-        .connect(supplyController) 
-        .mint(randomAddress.address, mintAmount)
-    ).to.emit(contractInstance, "Mint")
-     .withArgs(randomAddress.address, mintAmount);
-  });
-  
   it("Should fail mint when reserves are insufficient after decimal normalization", async function() {
     const mintAmount = ethers.parseUnits("1000", 6); // Token has 6 decimals
     const totalSupply = await contractInstance.totalSupply();
@@ -485,10 +457,12 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     await newProofFeedContract
       .connect(supplyController)
       .updateData(totalSupply, 1, timeStampInSeconds, 1);
-    const [proofFeedData] = await contractInstance
+    const [proofFeedData , updatedAt, decimals] = await contractInstance
       .connect(defaultAdmin)
       .getLatestReserve();
     expect(proofFeedData).to.equal(totalSupply);
+    expect(updatedAt).to.equal(timeStampInSeconds);
+    expect(decimals).to.equal(6);
 
     // Should error out if proof of address set to zero address
     let failed = false;
@@ -517,7 +491,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       .withArgs(dummyAggregatorInstance.getAddress());
   });
 
-  it("Should not allow setting PoR feed with decimals greater than 18", async function() {
+  it("Should not allow setting PoR feed with decimals > 18 or  < 6", async function() {
     const newProofFeed = await ethers.getContractFactory("DummyAggregatorV3");
     const newPoRFeedContract = await newProofFeed.deploy(
       19, // 19 decimals (greater than 18)
@@ -538,6 +512,23 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
         .connect(defaultAdmin)
         .setProofOfReserveFeed(newPoRFeedAddress)
     ).to.be.revertedWith("Invalid decimals");
+
+    const newPoRFeedContractWithLessPrecision = await newProofFeed.deploy(
+      5, 
+      "Invalid decimal PoR feed",
+      1
+    );
+    const porFeedWithLessPrecision = await newPoRFeedContractWithLessPrecision.getAddress();
+    await newPoRFeedContractWithLessPrecision
+    .connect(supplyController)
+    .updateData(totalSupply, 1, timeStampInSeconds, 1);
+
+    await expect(
+      contractInstance
+        .connect(defaultAdmin)
+        .setProofOfReserveFeed(porFeedWithLessPrecision)
+    ).to.be.revertedWith("Invalid decimals");
+
   
     // Verify that feed was not updated
     const currentFeed = await contractInstance.getProofOfReserveFeed();
