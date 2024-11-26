@@ -309,13 +309,14 @@ contract USDS is
      * @dev Retrieves the latest reserve value from the proofOfReserveFeed.
      * @return reserve The latest reserve value as a uint256.
      * @return updatedAt The timestamp of the latest reserve value.
+     * @return decimalPrecision The number of decimals used by the feed.
      */
     function getLatestReserve()
         public
         view
-        returns (uint256 reserve, uint256 updatedAt)
+        returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
     {
-        (reserve, updatedAt) = getLatestReserveFromFeed(proofOfReserveFeed);
+        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(proofOfReserveFeed);
     }
 
     /**
@@ -346,7 +347,7 @@ contract USDS is
         uint256 mintAmount,
         bool isBatch
     ) internal view {
-        (uint256 reserves, uint256 reserveUpdateAt) = getLatestReserveFromFeed(
+        (uint256 reserves, uint256 reserveUpdateAt, uint8 reserveDecimals) = getLatestReserveFromFeed(
             feed
         );
         require(reserves > 0, "Invalid PoR data");
@@ -362,18 +363,14 @@ contract USDS is
         // different than the token's decimals
         uint256 currentSupply = totalSupply();
         uint8 trueDecimals = decimals();
-        uint8 reserveDecimals = feed.decimals();
-        require(reserveDecimals <= 18, "Invalid decimals");
+        require(reserveDecimals >= trueDecimals && reserveDecimals <= 18, "Invalid decimals");
         if (trueDecimals < reserveDecimals) {
             currentSupply =
                 currentSupply *
                 10**uint256(reserveDecimals - trueDecimals);
             mintAmount = mintAmount * 
                 10**uint256(reserveDecimals - trueDecimals);
-        } else if (trueDecimals > reserveDecimals) {
-            reserves = reserves * 10**uint256(trueDecimals - reserveDecimals);
         }
-
         // For batched minting, the mint operation is performed before validation.
         // As a result, the minted amount is already included in `totalSupply` at this point.
         // Therefore, in batch mode (`isBatch`), we only need to verify that `totalSupply`
@@ -393,10 +390,11 @@ contract USDS is
      * @param feed The address of the proofOfReserveFeed contract.
      * @return reserve The latest reserve value as a uint256.
      * @return updatedAt The timestamp of the latest reserve value.
+     * @return feedDecimals The number of decimals used by the feed.
      */
     function getLatestReserveFromFeed(
         AggregatorV3Interface feed
-    ) internal view returns (uint256 reserve, uint256 updatedAt) {
+    ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
         (
             /* uint80 roundID */,
             int reserveFunds,
@@ -407,6 +405,7 @@ contract USDS is
 
         reserve = uint256(reserveFunds);
         updatedAt = roundTimeStamp;
+        feedDecimals = feed.decimals();
     }
 
     /**
