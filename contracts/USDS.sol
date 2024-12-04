@@ -187,7 +187,6 @@ contract USDS is
      * @param value The amount of tokens to transfer.
      * Emits a {Transfer} event.
      */
-
     function transferFrom(
         address from,
         address to,
