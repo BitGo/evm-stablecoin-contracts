@@ -396,9 +396,9 @@ contract USDS is
     ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
         (
             /* uint80 roundID */,
-            int reserveFunds,
-            /* uint startedAt */,
-            uint roundTimeStamp,
+            int256 reserveFunds,
+            /* uint256 startedAt */,
+            uint256 roundTimeStamp,
             /* uint80 answeredInRound */
         ) = feed.latestRoundData();
 
