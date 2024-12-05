@@ -65,7 +65,7 @@ describe("Transfer Tests", function () {
           recipient.address,
           amount
         )
-      ).to.be.revertedWith("Amount must be > 0");
+      ).to.be.revertedWithCustomError(contractInstance, "InvalidAmount()");
     });
   });
 
