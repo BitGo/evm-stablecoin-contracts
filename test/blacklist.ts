@@ -235,7 +235,7 @@ describe("USDS blacklist", function () {
     } catch (error) {
       expect(error).to.be.an("error");
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Spender is blacklisted'"
+        "VM Exception while processing transaction: reverted with custom error 'SpenderBlacklisted()'"
       );
     }
 
