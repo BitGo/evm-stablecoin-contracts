@@ -205,13 +205,10 @@ contract USDS is
         address to,
         uint256 value
     ) public virtual override returns (bool) {
-        address spender = _msgSender();
         if (isBlacklisted(_msgSender())) revert SpenderBlacklisted();
         if (isBlacklisted(from)) revert SenderBlacklisted();
         if (value <= 0) revert InvalidAmount();
-        _spendAllowance(from, spender, value);
-        _transfer(from, to, value);
-        return true;
+        return super.transferFrom(from, to, value);
     }
 
     /**
@@ -226,10 +223,8 @@ contract USDS is
         address to,
         uint256 value
     ) public virtual override returns (bool) {
-        address owner = _msgSender();
         if (isBlacklisted(_msgSender())) revert SenderBlacklisted();
-        _transfer(owner, to, value);
-        return true;
+        return super.transfer(to, value);
     }
 
     /**
