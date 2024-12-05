@@ -31,6 +31,21 @@ contract USDS is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
+    // --- Custom Errors ---
+    error InvalidAddress();
+    error InvalidTimeDelay();
+    error InvalidAmount();
+    error InvalidDecimals();
+    error InvalidPoRData();
+    error PoROutdated();
+    error ExceedsMintTransactionCap();
+    error SupplyExceedsReserves();
+    error SenderBlacklisted();
+    error SenderNotBlacklisted();
+    error SpenderBlacklisted();
+    error RecipientBlacklisted();
+    error ArrayLengthsMismatch();
+
     uint256 public acceptableProofOfReserveTimeDelay;
     uint256 public mintCapPerTransaction;
 
@@ -76,7 +91,7 @@ contract USDS is
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
-        require(proofOfReserveAddress != address(0), "Invalid PoR address");
+        if (proofOfReserveAddress == address(0)) revert InvalidAddress();
         proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
         acceptableProofOfReserveTimeDelay = 24 hours;
@@ -96,7 +111,7 @@ contract USDS is
     function setProofOfReserveFeed(
         address newFeedAddress
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newFeedAddress != address(0), "Invalid PoR address");
+        if (newFeedAddress == address(0)) revert InvalidAddress();
 
         // verify feed is not stale before updating the feed address
         AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
@@ -115,7 +130,7 @@ contract USDS is
     function setAcceptableProofOfReserveTimeDelay(
         uint256 newTimeDelay
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newTimeDelay > 0, "Delay must be > 0");
+        if (newTimeDelay <= 0) revert InvalidTimeDelay();
         acceptableProofOfReserveTimeDelay = newTimeDelay;
         emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
@@ -129,7 +144,7 @@ contract USDS is
     function setMintCapPerTransaction(
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newLimit > 0, "Mint cap must be > 0");
+        if (newLimit <= 0) revert InvalidAmount();
         mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
     }
@@ -141,7 +156,7 @@ contract USDS is
     function destroyBlacklistedFunds(
         address account
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(isBlacklisted(account), "Sender is not blacklisted");
+        if (!isBlacklisted(account)) revert SenderNotBlacklisted();
         uint256 balance = balanceOf(account);
         _burn(account, balance);
         emit Burn(account, balance);
@@ -158,9 +173,9 @@ contract USDS is
         address recipient,
         uint256 amount
     ) external onlyRole(RESCUER_ROLE) {
-        require(recipient != address(0), "Invalid recipient");
-        require(amount > 0, "Invalid amount");
-        require(!isBlacklisted(recipient), "Recipient blacklisted");
+        if (recipient == address(0)) revert InvalidAddress();
+        if (amount <= 0) revert InvalidAmount();
+        if (isBlacklisted(recipient)) revert RecipientBlacklisted();
         token.safeTransfer(recipient, amount);
         emit TokensRescued(address(token), recipient, amount);
     }
@@ -193,9 +208,9 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address spender = _msgSender();
-        require(!isBlacklisted(spender), "Spender is blacklisted");
-        require(!isBlacklisted(from), "Sender is blacklisted");
-        require(value != 0, "Amount must be > 0");
+        if (isBlacklisted(_msgSender())) revert SpenderBlacklisted();
+        if (isBlacklisted(from)) revert SenderBlacklisted();
+        if (value <= 0) revert InvalidAmount();
         _spendAllowance(from, spender, value);
         _transfer(from, to, value);
         return true;
@@ -214,7 +229,7 @@ contract USDS is
         uint256 value
     ) public virtual override returns (bool) {
         address owner = _msgSender();
-        require(!isBlacklisted(owner), "Sender is blacklisted");
+        if (isBlacklisted(_msgSender())) revert SenderBlacklisted();
         _transfer(owner, to, value);
         return true;
     }
@@ -232,11 +247,8 @@ contract USDS is
         address to,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(to), "Recipient is blacklisted");
-        require(
-            amount <= mintCapPerTransaction,
-            "Exceeds mint transaction cap"
-        );
+        if (isBlacklisted(to)) revert RecipientBlacklisted();
+        if (amount > mintCapPerTransaction) revert ExceedsMintTransactionCap();
         validateProofOfReserve(proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
@@ -251,17 +263,11 @@ contract USDS is
         address[] memory toAddresses,
         uint256[] memory amounts
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(
-            toAddresses.length == amounts.length,
-            "Array lengths must match"
-        );
+        if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            require(
-                amounts[i] <= mintCapPerTransaction,
-                "Exceeds mint transaction cap"
-            );
-            require(!isBlacklisted(toAddresses[i]), "Recipient is blacklisted");
+            if (amounts[i] > mintCapPerTransaction) revert ExceedsMintTransactionCap();
+            if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
             emit Mint(toAddresses[i], amounts[i]);
@@ -278,7 +284,7 @@ contract USDS is
         address from,
         uint256 amount
     ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        require(!isBlacklisted(from), "Sender is blacklisted");
+        if (isBlacklisted(from)) revert SenderBlacklisted();
         _burn(from, amount);
         emit Burn(from, amount);
     }
@@ -349,20 +355,15 @@ contract USDS is
         (uint256 reserves, uint256 reserveUpdateAt, uint8 reserveDecimals) = getLatestReserveFromFeed(
             feed
         );
-        require(reserves > 0, "Invalid PoR data");
-        require(
-            block.timestamp <=
-                reserveUpdateAt + acceptableProofOfReserveTimeDelay,
-            "PoR outdated"
-        );
-
+        if (reserves <= 0) revert InvalidPoRData();
+        if (block.timestamp > reserveUpdateAt + acceptableProofOfReserveTimeDelay) revert PoROutdated();
        
         // Normalize currencies to in case the number 
         // of decimals reported by the feed is
         // different than the token's decimals
         uint256 currentSupply = totalSupply();
         uint8 trueDecimals = decimals();
-        require(reserveDecimals >= trueDecimals && reserveDecimals <= 18, "Invalid decimals");
+        if (reserveDecimals < trueDecimals || reserveDecimals > 18) revert InvalidDecimals();
         if (trueDecimals < reserveDecimals) {
             currentSupply =
                 currentSupply *
@@ -376,12 +377,9 @@ contract USDS is
         // does not exceed the available `reserves`.
         // In non-batch mode, the `mintAmount` is not yet included in `totalSupply`,
         // so we need to ensure that `totalSupply + mintAmount` stays within `reserves`.
-        require(
-            isBatch
-                ? currentSupply <= reserves
-                : currentSupply + mintAmount <= reserves,
-            "Supply exceeds reserves"
-        );
+        if (isBatch ? currentSupply > reserves : currentSupply + mintAmount > reserves) {
+            revert SupplyExceedsReserves();
+        }
     }
 
     /**

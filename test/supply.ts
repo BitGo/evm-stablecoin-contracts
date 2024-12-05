@@ -80,7 +80,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       contractInstance
         .connect(supplyController)
         .mint(randomAddress.address, mintAmount)
-    ).to.be.revertedWith("Exceeds mint transaction cap");
+    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap()");
   });
 
   it("Should update the max mint limit successfully through setter function", async function () {
@@ -101,7 +101,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     const exceedingMintAmount = ethers.parseUnits("2500000", 18); // 2.5 million tokens
     await expect(
       contractInstance.connect(supplyController).mint(randomAddress.address, exceedingMintAmount)
-    ).to.be.revertedWith("Exceeds mint transaction cap");
+    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap()");
   });
 
   it("Should fail to update the max mint limit to zero", async function () {
@@ -110,7 +110,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     // Attempt to update the max mint limit to zero and expect it to fail
     await expect(
       contractInstance.connect(defaultAdmin).setMintCapPerTransaction(zeroCap)
-    ).to.be.revertedWith("Mint cap must be > 0");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidAmount()");
   });
 
   it("Should mint tokens successfully to any external address", async function () {
@@ -205,7 +205,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
         addressZero,
         transferAmount
       )
-    ).to.be.revertedWith("Invalid recipient");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidAddress()");
   });
   
   it("Should fail to rescue zero tokens", async function() {
@@ -215,7 +215,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
         recoverAddress.address,
         0
       )
-    ).to.be.revertedWith("Invalid amount");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidAmount()");
   });
   
   it("Should fail to rescue tokens to blacklisted address", async function() {
@@ -230,7 +230,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
         recoverAddress.address,
         transferAmount
       )
-    ).to.be.revertedWith("Recipient blacklisted");
+    ).to.be.revertedWithCustomError(contractInstance, "RecipientBlacklisted");
     await contractInstance.connect(blacklister).unblacklist(recoverAddress.address);
   });
   
@@ -308,7 +308,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Supply exceeds reserves'"
+        "VM Exception while processing transaction: reverted with custom error 'SupplyExceedsReserves()'"
       );
       expect(error).to.be.an("error");
     }
@@ -367,7 +367,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       contractInstance
         .connect(supplyController)
         .mint(randomAddress.address, mintAmount)
-    ).to.be.revertedWith("Supply exceeds reserves");
+    ).to.be.revertedWithCustomError(contractInstance, "SupplyExceedsReserves()");
   });
 
   it("Should fail to mint tokens when proof of reserve feed is outdated", async function () {
@@ -393,7 +393,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'PoR outdated'"
+        "VM Exception while processing transaction: reverted with custom error 'PoROutdated()'"
       );
       expect(error).to.be.an("error");
     }
@@ -429,7 +429,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Delay must be > 0'"
+        "VM Exception while processing transaction: reverted with custom error 'InvalidTimeDelay()'"
       );
       expect(error).to.be.an("error");
     }
@@ -473,7 +473,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Invalid PoR address'"
+        "VM Exception while processing transaction: reverted with custom error 'InvalidAddress()'"
       );
       expect(error).to.be.an("error");
     }
@@ -511,7 +511,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       contractInstance
         .connect(defaultAdmin)
         .setProofOfReserveFeed(newPoRFeedAddress)
-    ).to.be.revertedWith("Invalid decimals");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidDecimals()");
 
     const newPoRFeedContractWithLessPrecision = await newProofFeed.deploy(
       5, 
@@ -527,7 +527,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       contractInstance
         .connect(defaultAdmin)
         .setProofOfReserveFeed(porFeedWithLessPrecision)
-    ).to.be.revertedWith("Invalid decimals");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidDecimals()");
 
   
     // Verify that feed was not updated
@@ -558,7 +558,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).to.equal(
-        "VM Exception while processing transaction: reverted with reason string 'PoR outdated'"
+        "VM Exception while processing transaction: reverted with custom error 'PoROutdated()'"
       );
       expect(error).to.be.an("error");
     }
@@ -651,7 +651,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Supply exceeds reserves'"
+        "VM Exception while processing transaction: reverted with custom error 'SupplyExceedsReserves()'"
       );
       expect(error).to.be.an("error");
     }
@@ -682,7 +682,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
-        "VM Exception while processing transaction: reverted with reason string 'Array lengths must match'"
+        "VM Exception while processing transaction: reverted with custom error 'ArrayLengthsMismatch()'"
       );
       expect(error).to.be.an("error");
     }
