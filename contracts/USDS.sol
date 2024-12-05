@@ -81,7 +81,7 @@ contract USDS is
         address blacklister,
         address rescuer,
         address proofOfReserveAddress
-    ) public initializer {
+    ) external initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
         __AccessControl_init();
@@ -185,14 +185,14 @@ contract USDS is
     /**
      * @dev Pauses all token transfers.
      */
-    function pause() public onlyRole(FREEZER_ROLE) {
+    function pause() external onlyRole(FREEZER_ROLE) {
         _pause();
     }
 
     /**
      * @dev Unpauses all token transfers.
      */
-    function unpause() public onlyRole(FREEZER_ROLE) {
+    function unpause() external onlyRole(FREEZER_ROLE) {
         _unpause();
     }
 
@@ -248,7 +248,7 @@ contract USDS is
     function mint(
         address to,
         uint256 amount
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(to)) revert RecipientBlacklisted();
         if (amount > mintCapPerTransaction) revert ExceedsMintTransactionCap();
         validateProofOfReserve(proofOfReserveFeed, amount, false);
@@ -264,7 +264,7 @@ contract USDS is
     function mintBatch(
         address[] memory toAddresses,
         uint256[] memory amounts
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
@@ -286,7 +286,7 @@ contract USDS is
     function burn(
         address from,
         uint256 amount
-    ) public onlyRole(SUPPLY_CONTROLLER_ROLE) {
+    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(from)) revert SenderBlacklisted();
         _burn(from, amount);
         emit Burn(from, amount);
@@ -309,7 +309,7 @@ contract USDS is
      * @dev Retrieves the address of the ProofOfReserveFeed contract.
      * @return The address of the ProofOfReserveFeed contract.
      */
-    function getProofOfReserveFeed() public view returns (address) {
+    function getProofOfReserveFeed() external view returns (address) {
         return address(proofOfReserveFeed);
     }
 

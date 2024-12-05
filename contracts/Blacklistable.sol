@@ -38,7 +38,7 @@ contract Blacklistable is
      */
     function blacklist(
         address account
-    ) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    ) external onlyRole(keccak256("BLACKLISTER_ROLE")) {
         _setBlacklistState(account, true);
     }
 
@@ -48,7 +48,7 @@ contract Blacklistable is
      */
     function unblacklist(
         address account
-    ) public onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    ) external onlyRole(keccak256("BLACKLISTER_ROLE")) {
         _setBlacklistState(account, false);
     }
 
