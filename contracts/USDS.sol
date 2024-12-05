@@ -5,10 +5,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import { ERC20PausableUpgradeable } 
-        from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import { ERC20PermitUpgradeable } 
-        from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {ERC20PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
 /// @title Official USDS ERC-20 Implementation
@@ -39,7 +37,11 @@ contract USDS is
     event ProofOfReserveFeedSet(address newFeed);
     event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
     event MintCapPerTransactionSet(uint256 newLimit);
-    event TokensRescued(address indexed token, address indexed recipient, uint256 amount);
+    event TokensRescued(
+        address indexed token,
+        address indexed recipient,
+        uint256 amount
+    );
 
     // --- Custom Errors ---
     error InvalidAddress();
@@ -266,7 +268,8 @@ contract USDS is
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > mintCapPerTransaction) revert ExceedsMintTransactionCap();
+            if (amounts[i] > mintCapPerTransaction)
+                revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
@@ -321,7 +324,9 @@ contract USDS is
         view
         returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
     {
-        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(proofOfReserveFeed);
+        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(
+            proofOfReserveFeed
+        );
     }
 
     /**
@@ -352,24 +357,31 @@ contract USDS is
         uint256 mintAmount,
         bool isBatch
     ) internal view {
-        (uint256 reserves, uint256 reserveUpdateAt, uint8 reserveDecimals) = getLatestReserveFromFeed(
-            feed
-        );
+        (
+            uint256 reserves,
+            uint256 reserveUpdateAt,
+            uint8 reserveDecimals
+        ) = getLatestReserveFromFeed(feed);
         if (reserves <= 0) revert InvalidPoRData();
-        if (block.timestamp > reserveUpdateAt + acceptableProofOfReserveTimeDelay) revert PoROutdated();
-       
-        // Normalize currencies to in case the number 
+        if (
+            block.timestamp >
+            reserveUpdateAt + acceptableProofOfReserveTimeDelay
+        ) revert PoROutdated();
+
+        // Normalize currencies to in case the number
         // of decimals reported by the feed is
         // different than the token's decimals
         uint256 currentSupply = totalSupply();
         uint8 trueDecimals = decimals();
-        if (reserveDecimals < trueDecimals || reserveDecimals > 18) revert InvalidDecimals();
+        if (reserveDecimals < trueDecimals || reserveDecimals > 18)
+            revert InvalidDecimals();
         if (trueDecimals < reserveDecimals) {
             currentSupply =
                 currentSupply *
-                10**uint256(reserveDecimals - trueDecimals);
-            mintAmount = mintAmount * 
-                10**uint256(reserveDecimals - trueDecimals);
+                10 ** uint256(reserveDecimals - trueDecimals);
+            mintAmount =
+                mintAmount *
+                10 ** uint256(reserveDecimals - trueDecimals);
         }
         // For batched minting, the mint operation is performed before validation.
         // As a result, the minted amount is already included in `totalSupply` at this point.
@@ -377,7 +389,11 @@ contract USDS is
         // does not exceed the available `reserves`.
         // In non-batch mode, the `mintAmount` is not yet included in `totalSupply`,
         // so we need to ensure that `totalSupply + mintAmount` stays within `reserves`.
-        if (isBatch ? currentSupply > reserves : (currentSupply + mintAmount) > reserves) {
+        if (
+            isBatch
+                ? currentSupply > reserves
+                : (currentSupply + mintAmount) > reserves
+        ) {
             revert SupplyExceedsReserves();
         }
     }
@@ -391,14 +407,19 @@ contract USDS is
      */
     function getLatestReserveFromFeed(
         AggregatorV3Interface feed
-    ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
+    )
+        internal
+        view
+        returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals)
+    {
         (
-            /* uint80 roundID */,
-            int256 reserveFunds,
-            /* uint256 startedAt */,
-            uint256 roundTimeStamp,
-            /* uint80 answeredInRound */
-        ) = feed.latestRoundData();
+            ,
+            /* uint80 roundID */ int256 reserveFunds,
+            ,
+            /* uint256 startedAt */ uint256 roundTimeStamp,
+
+        ) = /* uint80 answeredInRound */
+            feed.latestRoundData();
 
         reserve = uint256(reserveFunds);
         updatedAt = roundTimeStamp;
