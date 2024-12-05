@@ -94,7 +94,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       .to.emit(contractInstance, "MintCapPerTransactionSet")
       .withArgs(newPerTransactionCap)
 
-    const currentMaxMintLimit = await contractInstance.mintCapPerTransaction();
+    const currentMaxMintLimit = await contractInstance.getMintCapPerTransaction();
     expect(currentMaxMintLimit).to.equal(newPerTransactionCap);
 
     // Attempt to mint exceeding the updated limit and expect it to fail
@@ -408,7 +408,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       .to.emit(contractInstance, "AcceptableProofOfReserveDelaySet")
       .withArgs(90000);
     const proofOfReserveTimeDelay =
-      await contractInstance.acceptableProofOfReserveTimeDelay();
+      await contractInstance.getAcceptableProofOfReserveTimeDelay();
     expect(proofOfReserveTimeDelay).to.equal(90000);
 
     // Attempt to mint tokens when proof of reserve feed is not outdated

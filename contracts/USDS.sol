@@ -20,7 +20,8 @@ contract USDS is
 {
     using SafeERC20 for IERC20;
 
-    AggregatorV3Interface private proofOfReserveFeed;
+    // keccak256(abi.encode(uint256(keccak256("contract.storage.GoUSD")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant USDSStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
 
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
@@ -28,9 +29,6 @@ contract USDS is
         keccak256("SUPPLY_CONTROLLER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
-
-    uint256 public acceptableProofOfReserveTimeDelay;
-    uint256 public mintCapPerTransaction;
 
     event Burn(address indexed from, uint256 amount);
     event Mint(address indexed to, uint256 amount);
@@ -57,6 +55,13 @@ contract USDS is
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+
+    // --- Namespaced Storage ---
+    struct USDSStorage {
+        AggregatorV3Interface proofOfReserveFeed;
+        uint256 acceptableProofOfReserveTimeDelay;
+        uint256 mintCapPerTransaction;
     }
 
     /**
@@ -90,14 +95,14 @@ contract USDS is
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
         if (proofOfReserveAddress == address(0)) revert InvalidAddress();
-        proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
+        _getUSDSStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
-        acceptableProofOfReserveTimeDelay = 24 hours;
+        _getUSDSStorage().acceptableProofOfReserveTimeDelay = 24 hours;
         emit AcceptableProofOfReserveDelaySet(
-            acceptableProofOfReserveTimeDelay
+            _getUSDSStorage().acceptableProofOfReserveTimeDelay
         );
-        mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
-        emit MintCapPerTransactionSet(mintCapPerTransaction);
+        _getUSDSStorage().mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
+        emit MintCapPerTransactionSet(_getUSDSStorage().mintCapPerTransaction);
     }
 
     /**
@@ -115,7 +120,7 @@ contract USDS is
         AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
         validateProofOfReserve(newFeed, 0, false);
 
-        proofOfReserveFeed = newFeed;
+        _getUSDSStorage().proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -129,7 +134,7 @@ contract USDS is
         uint256 newTimeDelay
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newTimeDelay <= 0) revert InvalidTimeDelay();
-        acceptableProofOfReserveTimeDelay = newTimeDelay;
+        _getUSDSStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
         emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
@@ -143,7 +148,7 @@ contract USDS is
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newLimit <= 0) revert InvalidAmount();
-        mintCapPerTransaction = newLimit;
+        _getUSDSStorage().mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
     }
 
@@ -241,8 +246,8 @@ contract USDS is
         uint256 amount
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(to)) revert RecipientBlacklisted();
-        if (amount > mintCapPerTransaction) revert ExceedsMintTransactionCap();
-        validateProofOfReserve(proofOfReserveFeed, amount, false);
+        if (amount > _getUSDSStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+        validateProofOfReserve(_getUSDSStorage().proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -259,13 +264,13 @@ contract USDS is
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > mintCapPerTransaction) revert ExceedsMintTransactionCap();
+            if (amounts[i] > _getUSDSStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
             emit Mint(toAddresses[i], amounts[i]);
         }
-        validateProofOfReserve(proofOfReserveFeed, totalAmount, true);
+        validateProofOfReserve(_getUSDSStorage().proofOfReserveFeed, totalAmount, true);
     }
 
     /**
@@ -296,11 +301,27 @@ contract USDS is
     }
 
     /**
+     * @dev Retrieves the mint cap per transaction.
+     * @return The mint cap per transaction.
+     */
+    function getMintCapPerTransaction() external view returns (uint256) {
+        return _getUSDSStorage().mintCapPerTransaction;
+    }
+
+    /**
+     * @dev Retrieves the acceptable proofOfReserve time delay.
+     * @return The acceptable proofOfReserve time delay.
+     */
+    function getAcceptableProofOfReserveTimeDelay() external view returns (uint256) {
+        return _getUSDSStorage().acceptableProofOfReserveTimeDelay;
+    }
+
+    /**
      * @dev Retrieves the address of the ProofOfReserveFeed contract.
      * @return The address of the ProofOfReserveFeed contract.
      */
     function getProofOfReserveFeed() external view returns (address) {
-        return address(proofOfReserveFeed);
+        return address(_getUSDSStorage().proofOfReserveFeed);
     }
 
     /**
@@ -314,7 +335,7 @@ contract USDS is
         view
         returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
     {
-        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(proofOfReserveFeed);
+        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(_getUSDSStorage().proofOfReserveFeed);
     }
 
     /**
@@ -348,9 +369,14 @@ contract USDS is
         (uint256 reserves, uint256 reserveUpdateAt, uint8 reserveDecimals) = getLatestReserveFromFeed(
             feed
         );
+
         if (reserves <= 0) revert InvalidPoRData();
-        if (block.timestamp > reserveUpdateAt + acceptableProofOfReserveTimeDelay) revert PoROutdated();
-       
+        if (
+            block.timestamp >
+            (reserveUpdateAt +
+                _getUSDSStorage().acceptableProofOfReserveTimeDelay)
+        ) revert PoROutdated();
+    
         // Normalize currencies to in case the number 
         // of decimals reported by the feed is
         // different than the token's decimals
@@ -427,5 +453,17 @@ contract USDS is
         // This won't trigger the ERC20Upgradeable._update
         // since we are not calling super._update in Blacklistable._update
         ERC20PausableUpgradeable._update(from, to, value);
+    }
+
+    /**
+     * @dev Fetches the namespaced storage structure for the USDS contract.
+     * This function uses EIP-7201-style namespaced storage to ensure compatibility
+     * and extensibility for upgradeable contracts.
+     * @return $ The `USDSStorage` struct containing storage variables specific to the USDS contract.
+     */
+    function _getUSDSStorage() private pure returns (USDSStorage storage $) {
+        assembly {
+            $.slot := USDSStorageLocation
+        }
     }
 }
