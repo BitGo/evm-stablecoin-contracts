@@ -193,8 +193,9 @@ contract USDS is
     }
 
     /**
-     * @dev Transfers `amount` tokens from `sender` to `recipient` using the allowance mechanism.
-     * `amount` is then deducted from the caller's allowance.
+     * @dev Transfers `value` tokens from `from` to `to` address 
+     * using the allowance mechanism. `value` is then deducted 
+     * from the caller's allowance.
      * @param from The address to transfer tokens from.
      * @param to The address to transfer tokens to.
      * @param value The amount of tokens to transfer.
@@ -269,7 +270,8 @@ contract USDS is
     }
 
     /**
-     * @dev Burns tokens from the reserve address.
+     * @dev Burns tokens from `from` address. Action is restricted 
+     * to the supply controller role.
      * @param from The address from which the tokens will be burned.
      * @param amount The amount of tokens to be burned.
      */
