@@ -10,8 +10,16 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20Pausable
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
 
-/// @title Official USDS ERC-20 Implementation
-/// @custom:security-contact support@bitgo.com
+/**
+ * @title Official USDS ERC-20 Implementation
+ * @dev This contract implements the ERC-20 standard for the USDS token, providing functionalities
+ * such as minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
+ * UUPS (Universal Upgradeable Proxy Standard). It is designed to be used in secure financial systems
+ * and ensures compliance with certain operational restrictions.
+ * 
+ * /// @title Official USDS ERC-20 Implementation
+ * /// @custom:security-contact support@bitgo.com
+ */
 contract USDS is
     Initializable,
     Blacklistable,
@@ -24,32 +32,126 @@ contract USDS is
     // keccak256(abi.encode(uint256(keccak256("contract.storage.GoUSD")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant USDSStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
 
+    // --- Roles ---
+    /**
+     * @dev The keccak256 hash for the "FREEZER_ROLE" string. This role
+     * grants the ability to freeze or unfreeze all token transfers within the contract.
+     */
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
-    bytes32 public constant SUPPLY_CONTROLLER_ROLE =
-        keccak256("SUPPLY_CONTROLLER_ROLE");
+
+    /**
+     * @dev The keccak256 hash for the "SUPPLY_CONTROLLER_ROLE" string. This role
+     * is responsible for managing the token supply, including minting, burning or destroy blacklisted funds.
+     */
+    bytes32 public constant SUPPLY_CONTROLLER_ROLE = keccak256("SUPPLY_CONTROLLER_ROLE");
+
+    /**
+     * @dev The keccak256 hash for the "UPGRADER_ROLE" string. This role allows 
+     * the user to upgrade the contract, typically for implementing new features or bug fixes.
+     */
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+
+    /**
+     * @dev The keccak256 hash for the "RESCUER_ROLE" string. This role allows 
+     * the user to rescue tokens that are locked or stuck in the contract.
+     */
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
+    // --- Events ---
+    /**
+     * @dev Emitted when tokens are burned from the `from` address.
+     */
     event Burn(address indexed from, uint256 amount);
+
+    /**
+     * @dev Emitted when tokens are minted to the `to` address.
+     */
     event Mint(address indexed to, uint256 amount);
+
+    /**
+     * @dev Emitted when the proof of reserve feed is set to a new address.
+     */
     event ProofOfReserveFeedSet(address newFeed);
+
+    /**
+     * @dev Emitted when the acceptable proof of reserve delay is updated.
+     */
     event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
+
+    /**
+     * @dev Emitted when the mint cap per transaction is set to a new value.
+     */
     event MintCapPerTransactionSet(uint256 newLimit);
+
+    /**
+     * @dev Emitted when tokens are rescued from an address and sent to a `recipient` address.
+     */
     event TokensRescued(address indexed token, address indexed recipient, uint256 amount);
 
     // --- Custom Errors ---
+    /**
+     * @dev The operation failed due to an invalid address.
+     */
     error InvalidAddress();
+
+    /**
+     * @dev The operation failed because the provided time delay is invalid.
+     */
     error InvalidTimeDelay();
+
+    /**
+     * @dev The operation failed due to an invalid amount provided.
+     */
     error InvalidAmount();
+
+    /**
+     * @dev The operation failed because the number of decimals is invalid.
+     */
     error InvalidDecimals();
+
+    /**
+     * @dev The operation failed due to invalid proof of reserve data.
+     */
     error InvalidPoRData();
+
+    /**
+     * @dev The operation failed because the proof of reserve data is outdated.
+     */
     error PoROutdated();
+
+    /**
+     * @dev The operation failed because the transaction exceeds the mint cap per transaction.
+     */
     error ExceedsMintTransactionCap();
+
+    /**
+     * @dev The operation failed because the supply exceeds the reserves.
+     */
     error SupplyExceedsReserves();
+
+    /**
+     * @dev The operation failed because the sender is blacklisted.
+     */
     error SenderBlacklisted();
+
+    /**
+     * @dev The operation failed because the sender is not blacklisted when expected.
+     */
     error SenderNotBlacklisted();
+
+    /**
+     * @dev The operation failed because the spender is blacklisted.
+     */
     error SpenderBlacklisted();
+
+    /**
+     * @dev The operation failed because the recipient is blacklisted.
+     */
     error RecipientBlacklisted();
+
+    /**
+     * @dev The operation failed because the array lengths do not match.
+     */
     error ArrayLengthsMismatch();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -58,6 +160,13 @@ contract USDS is
     }
 
     // --- Namespaced Storage ---
+    /**
+     * @dev A struct for storing the namespaced storage related to the USDS token.
+     * It includes the following properties:
+     * - `proofOfReserveFeed`: The address of the aggregator contract used for proof of reserve data.
+     * - `acceptableProofOfReserveTimeDelay`: The time delay that is considered acceptable for proof of reserve updates.
+     * - `mintCapPerTransaction`: The maximum allowable mint amount per transaction.
+     */
     struct USDSStorage {
         AggregatorV3Interface proofOfReserveFeed;
         uint256 acceptableProofOfReserveTimeDelay;
