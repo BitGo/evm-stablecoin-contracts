@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -67,6 +68,7 @@ contract USDS is
     /**
      * @dev Initializes the USDS contract.
      * @param defaultAdmin The address of the default admin.
+     * @param defaultAdminDelay The delay (in seconds) before the default admin can be changed.
      * @param freezer The address of the freezer role.
      * @param supplyController The address of the supply controller role.
      * @param upgrader The address of the upgrader role.
@@ -76,6 +78,7 @@ contract USDS is
      */
     function initialize(
         address defaultAdmin,
+        uint48 defaultAdminDelay,
         address freezer,
         address supplyController,
         address upgrader,
@@ -85,10 +88,9 @@ contract USDS is
     ) external initializer {
         __ERC20_init("USDS", "USDS");
         __ERC20Pausable_init();
-        __AccessControl_init();
         __ERC20Permit_init("USDS");
         __UUPSUpgradeable_init();
-        _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
+        __AccessControlDefaultAdminRules_init(defaultAdminDelay, defaultAdmin);
         _grantRole(BLACKLISTER_ROLE, blacklister);
         _grantRole(FREEZER_ROLE, freezer);
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);

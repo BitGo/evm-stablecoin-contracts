@@ -45,10 +45,12 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
     dummyAggregatorInstance =
       (await dummyAggregatorContract.waitForDeployment()) as DummyAggregatorV3;
     const dummyAggregatorAddress = await dummyAggregatorInstance.getAddress();
+    const defaultAdminDelay = 7 * 24 * 60 * 60; // 7 days in seconds (or any appropriate value)
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
         defaultAdmin.address,
+        defaultAdminDelay,
         freezer.address,
         supplyController.address,
         upgrader.address,
