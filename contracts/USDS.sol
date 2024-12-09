@@ -215,14 +215,11 @@ contract USDS is
     ) public virtual override returns (bool) {
         if (isBlacklisted(_msgSender())) revert SpenderBlacklisted();
         if (isBlacklisted(from)) revert SenderBlacklisted();
-        if (value <= 0) revert InvalidAmount();
         return super.transferFrom(from, to, value);
     }
 
     /**
-     * @dev Transfers tokens from the caller's account to another account.
-     * Zero-value transfers are permitted to align with the ERC-20 standard
-     * and to trigger certain event logs or off-chain workflows without transferring tokens.
+     * @dev Transfers tokens from the caller's account to another account
      * @param to The address to transfer tokens to.
      * @param value The amount of tokens to transfer.
      * @return A boolean value indicating whether the transfer was successful or not.
@@ -237,10 +234,6 @@ contract USDS is
 
     /**
      * @dev Mints new tokens and assigns them to an address.
-     * Zero-value minting is permitted to ensure compatibility with off-chain workflows or systems
-     * where the action of minting might need to be logged or executed without an actual token amount.
-     * This flexibility avoids unnecessary reverts in cases where the minting operation is
-     * initiated programmatically or for testing purposes.
      * @param to The address to which the new tokens will be minted.
      * @param amount The amount of tokens to be minted.
      */
