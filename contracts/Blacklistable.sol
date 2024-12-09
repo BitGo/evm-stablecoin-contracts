@@ -22,6 +22,8 @@ contract Blacklistable is
     bytes32 private constant ERC20StorageLocation =
         0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
 
+    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+
     /**
      * @dev Checks if an account is blacklisted.
      * @param account The address to check.
@@ -38,7 +40,7 @@ contract Blacklistable is
      */
     function blacklist(
         address account
-    ) external onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    ) external onlyRole(BLACKLISTER_ROLE) {
         _setBlacklistState(account, true);
     }
 
@@ -48,7 +50,7 @@ contract Blacklistable is
      */
     function unblacklist(
         address account
-    ) external onlyRole(keccak256("BLACKLISTER_ROLE")) {
+    ) external onlyRole(BLACKLISTER_ROLE) {
         _setBlacklistState(account, false);
     }
 

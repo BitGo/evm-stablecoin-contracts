@@ -24,7 +24,6 @@ contract USDS is
     // keccak256(abi.encode(uint256(keccak256("contract.storage.GoUSD")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant USDSStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
 
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
     bytes32 public constant SUPPLY_CONTROLLER_ROLE =
         keccak256("SUPPLY_CONTROLLER_ROLE");
