@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -420,7 +421,7 @@ contract USDS is
             /* uint80 answeredInRound */
         ) = feed.latestRoundData();
 
-        reserve = uint256(reserveFunds);
+        reserve = SafeCast.toUint256(reserveFunds);
         updatedAt = roundTimeStamp;
         feedDecimals = feed.decimals();
     }
