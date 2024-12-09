@@ -51,6 +51,7 @@ contract USDS is
     error SpenderBlacklisted();
     error RecipientBlacklisted();
     error ArrayLengthsMismatch();
+    error SafeCastOverflowedIntToUint();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -421,6 +422,11 @@ contract USDS is
             uint256 roundTimeStamp,
             /* uint80 answeredInRound */
         ) = feed.latestRoundData();
+
+        // check to prevent unsafe casting
+        if (reserveFunds < 0) {
+            revert SafeCastOverflowedIntToUint();
+        }
 
         reserve = uint256(reserveFunds);
         updatedAt = roundTimeStamp;
