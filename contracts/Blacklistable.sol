@@ -14,7 +14,15 @@ contract Blacklistable is
     AccessControlDefaultAdminRulesUpgradeable,
     ERC20Upgradeable
 {
+    // --- Events ---
+    /**
+     * @dev Emitted when an `account` is blacklisted.
+     */
     event Blacklisted(address indexed account);
+
+    /**
+     * @dev Emitted when an `account` is removed from the blacklist.
+     */
     event Unblacklisted(address indexed account);
 
     // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
@@ -22,6 +30,12 @@ contract Blacklistable is
     bytes32 private constant ERC20StorageLocation =
         0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
 
+    /**
+     * @dev This role grants the ability to blacklist addresses, preventing them from 
+     * performing certain actions or interacting with the contract. 
+     * Additionally, this role allows the holder to unblacklist addresses, 
+     * restoring their ability to interact with the contract.
+     */
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
 
     /**
