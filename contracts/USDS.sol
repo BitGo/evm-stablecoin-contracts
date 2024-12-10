@@ -480,18 +480,14 @@ contract USDS is
                 _getUSDSStorage().acceptableProofOfReserveTimeDelay)
         ) revert PoROutdated();
     
-        // Normalize currencies to in case the number 
+        // Normalize reserves in case the number 
         // of decimals reported by the feed is
         // different than the token's decimals
         uint256 currentSupply = totalSupply();
         uint8 trueDecimals = decimals();
         if (reserveDecimals < trueDecimals || reserveDecimals > 18) revert InvalidDecimals();
         if (trueDecimals < reserveDecimals) {
-            currentSupply =
-                currentSupply *
-                10**uint256(reserveDecimals - trueDecimals);
-            mintAmount = mintAmount * 
-                10**uint256(reserveDecimals - trueDecimals);
+            reserves /= 10**uint256(reserveDecimals - trueDecimals);
         }
         // For batched minting, the mint operation is performed before validation.
         // As a result, the minted amount is already included in `totalSupply` at this point.
@@ -513,12 +509,12 @@ contract USDS is
      */
     function getLatestReserveFromFeed(
         AggregatorV3Interface feed
-    ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
+    ) internal view returns (uint256 reserve, uint256, uint8 feedDecimals) {
         (
             /* uint80 roundID */,
             int256 reserveFunds,
             /* uint256 startedAt */,
-            uint256 roundTimeStamp,
+            uint256 updatedAt,
             /* uint80 answeredInRound */
         ) = feed.latestRoundData();
 
@@ -528,8 +524,8 @@ contract USDS is
         }
 
         reserve = uint256(reserveFunds);
-        updatedAt = roundTimeStamp;
         feedDecimals = feed.decimals();
+        return (reserve, updatedAt, feedDecimals);
     }
 
     /**
