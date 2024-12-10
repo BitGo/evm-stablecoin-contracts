@@ -1,7 +1,7 @@
 import { ethers, upgrades } from "hardhat";
 
 async function main() {
-  const ContractFactory = await ethers.getContractFactory("USDS");
+  const ContractFactory = await ethers.getContractFactory("GoUSD");
 
   const {
     FREEZER_ADDRESS,

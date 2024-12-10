@@ -11,14 +11,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUp
 import "./Blacklistable.sol";
 
 /**
- * @title Official USDS ERC-20 Implementation
- * @dev This contract implements the ERC-20 standard for the USDS token, providing functionalities
+ * @title Official GoUSD ERC-20 Implementation
+ * @dev This contract implements the ERC-20 standard for the GoUSD token, providing functionalities
  * such as minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
  * UUPS (Universal Upgradeable Proxy Standard).
  * 
  * /// @custom:security-contact support@bitgo.com
  */
-contract USDS is
+contract GoUSD is
     Initializable,
     Blacklistable,
     ERC20PausableUpgradeable,
@@ -28,7 +28,7 @@ contract USDS is
     using SafeERC20 for IERC20;
 
     // keccak256(abi.encode(uint256(keccak256("contract.storage.GoUSD")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant USDSStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
+    bytes32 private constant GoUSDStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
 
     // --- Roles ---
     /**
@@ -156,20 +156,20 @@ contract USDS is
 
     // --- Namespaced Storage ---
     /**
-     * @dev A struct for storing the namespaced storage related to the USDS token.
+     * @dev A struct for storing the namespaced storage related to the GoUSD token.
      * It includes the following properties:
      * - `proofOfReserveFeed`: The address of the aggregator contract used for proof of reserve data.
      * - `acceptableProofOfReserveTimeDelay`: The time delay that is considered acceptable for proof of reserve updates.
      * - `mintCapPerTransaction`: The maximum allowable mint amount per transaction.
      */
-    struct USDSStorage {
+    struct GoUSDStorage {
         AggregatorV3Interface proofOfReserveFeed;
         uint256 acceptableProofOfReserveTimeDelay;
         uint256 mintCapPerTransaction;
     }
 
     /**
-     * @dev Initializes the USDS contract.
+     * @dev Initializes the GoUSD contract.
      * @param defaultAdmin The address of the default admin.
      * @param defaultAdminDelay The delay (in seconds) before the default admin can be changed.
      * @param freezer The address of the freezer role.
@@ -189,9 +189,9 @@ contract USDS is
         address rescuer,
         address proofOfReserveAddress
     ) external initializer {
-        __ERC20_init("USDS", "USDS");
+        __ERC20_init("GoUSD", "GoUSD");
         __ERC20Pausable_init();
-        __ERC20Permit_init("USDS");
+        __ERC20Permit_init("GoUSD");
         __UUPSUpgradeable_init();
         __AccessControlDefaultAdminRules_init(defaultAdminDelay, defaultAdmin);
         _grantRole(BLACKLISTER_ROLE, blacklister);
@@ -200,14 +200,14 @@ contract USDS is
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
         if (proofOfReserveAddress == address(0)) revert InvalidAddress();
-        _getUSDSStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
+        _getGoUSDStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
-        _getUSDSStorage().acceptableProofOfReserveTimeDelay = 24 hours;
+        _getGoUSDStorage().acceptableProofOfReserveTimeDelay = 24 hours;
         emit AcceptableProofOfReserveDelaySet(
-            _getUSDSStorage().acceptableProofOfReserveTimeDelay
+            _getGoUSDStorage().acceptableProofOfReserveTimeDelay
         );
-        _getUSDSStorage().mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
-        emit MintCapPerTransactionSet(_getUSDSStorage().mintCapPerTransaction);
+        _getGoUSDStorage().mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
+        emit MintCapPerTransactionSet(_getGoUSDStorage().mintCapPerTransaction);
     }
 
     /**
@@ -225,7 +225,7 @@ contract USDS is
         AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
         validateProofOfReserve(newFeed, 0, false);
 
-        _getUSDSStorage().proofOfReserveFeed = newFeed;
+        _getGoUSDStorage().proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -239,7 +239,7 @@ contract USDS is
         uint256 newTimeDelay
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newTimeDelay <= 0) revert InvalidTimeDelay();
-        _getUSDSStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
+        _getGoUSDStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
         emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
@@ -253,7 +253,7 @@ contract USDS is
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newLimit <= 0) revert InvalidAmount();
-        _getUSDSStorage().mintCapPerTransaction = newLimit;
+        _getGoUSDStorage().mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
     }
 
@@ -345,8 +345,8 @@ contract USDS is
         uint256 amount
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(to)) revert RecipientBlacklisted();
-        if (amount > _getUSDSStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
-        validateProofOfReserve(_getUSDSStorage().proofOfReserveFeed, amount, false);
+        if (amount > _getGoUSDStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+        validateProofOfReserve(_getGoUSDStorage().proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -363,13 +363,13 @@ contract USDS is
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > _getUSDSStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+            if (amounts[i] > _getGoUSDStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
             emit Mint(toAddresses[i], amounts[i]);
         }
-        validateProofOfReserve(_getUSDSStorage().proofOfReserveFeed, totalAmount, true);
+        validateProofOfReserve(_getGoUSDStorage().proofOfReserveFeed, totalAmount, true);
     }
 
     /**
@@ -405,7 +405,7 @@ contract USDS is
      * @return The mint cap per transaction.
      */
     function getMintCapPerTransaction() external view returns (uint256) {
-        return _getUSDSStorage().mintCapPerTransaction;
+        return _getGoUSDStorage().mintCapPerTransaction;
     }
 
     /**
@@ -413,7 +413,7 @@ contract USDS is
      * @return The acceptable proofOfReserve time delay.
      */
     function getAcceptableProofOfReserveTimeDelay() external view returns (uint256) {
-        return _getUSDSStorage().acceptableProofOfReserveTimeDelay;
+        return _getGoUSDStorage().acceptableProofOfReserveTimeDelay;
     }
 
     /**
@@ -421,7 +421,7 @@ contract USDS is
      * @return The address of the ProofOfReserveFeed contract.
      */
     function getProofOfReserveFeed() external view returns (address) {
-        return address(_getUSDSStorage().proofOfReserveFeed);
+        return address(_getGoUSDStorage().proofOfReserveFeed);
     }
 
     /**
@@ -435,7 +435,7 @@ contract USDS is
         view
         returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
     {
-        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(_getUSDSStorage().proofOfReserveFeed);
+        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(_getGoUSDStorage().proofOfReserveFeed);
     }
 
     /**
@@ -474,7 +474,7 @@ contract USDS is
         if (
             block.timestamp >
             (reserveUpdateAt +
-                _getUSDSStorage().acceptableProofOfReserveTimeDelay)
+                _getGoUSDStorage().acceptableProofOfReserveTimeDelay)
         ) revert PoROutdated();
     
         // Normalize reserves in case the number 
@@ -557,14 +557,14 @@ contract USDS is
     }
 
     /**
-     * @dev Fetches the namespaced storage structure for the USDS contract.
+     * @dev Fetches the namespaced storage structure for the GoUSD contract.
      * This function uses EIP-7201-style namespaced storage to ensure compatibility
      * and extensibility for upgradeable contracts.
-     * @return $ The `USDSStorage` struct containing storage variables specific to the USDS contract.
+     * @return $ The `GoUSDStorage` struct containing storage variables specific to the GoUSD contract.
      */
-    function _getUSDSStorage() private pure returns (USDSStorage storage $) {
+    function _getGoUSDStorage() private pure returns (GoUSDStorage storage $) {
         assembly {
-            $.slot := USDSStorageLocation
+            $.slot := GoUSDStorageLocation
         }
     }
 }
