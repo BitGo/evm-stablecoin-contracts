@@ -1,10 +1,10 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { DummyAggregatorV3, USDS } from "../typechain-types";
+import { DummyAggregatorV3, GoUSD } from "../typechain-types";
 
-describe("USDS blacklist", function () {
-  let contractInstance: USDS;
+describe("GoUSD blacklist", function () {
+  let contractInstance: GoUSD;
   let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
@@ -27,7 +27,7 @@ describe("USDS blacklist", function () {
       withdrawer,
       targetAccount,
     ] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("USDS");
+    const ContractFactory = await ethers.getContractFactory("GoUSD");
     const dummyAggregator =
       await ethers.getContractFactory("DummyAggregatorV3");
     const dummyAggregatorContract = await dummyAggregator.deploy(
@@ -54,7 +54,7 @@ describe("USDS blacklist", function () {
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
+    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
     const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
     await dummyAggregatorInstance
       .connect(supplyController)

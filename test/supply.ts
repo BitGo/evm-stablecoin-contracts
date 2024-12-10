@@ -1,10 +1,10 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { DummyAggregatorV3, USDS } from "../typechain-types";
+import { DummyAggregatorV3, GoUSD } from "../typechain-types";
 
-describe("USDS Minting,  Burning And Token Rescue", function () {
-  let contractInstance: USDS;
+describe("GoUSD Minting,  Burning And Token Rescue", function () {
+  let contractInstance: GoUSD;
   let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
@@ -34,7 +34,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       recoverAddress,
       randomAddress,
     ] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("USDS");
+    const ContractFactory = await ethers.getContractFactory("GoUSD");
     const dummyAggregator =
       await ethers.getContractFactory("DummyAggregatorV3");
     const dummyAggregatorContract = await dummyAggregator.deploy(
@@ -60,7 +60,7 @@ describe("USDS Minting,  Burning And Token Rescue", function () {
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as USDS;
+    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
   });
 
   it("Should have 0 total supply on init and unpaused", async function () {

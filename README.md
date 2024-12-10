@@ -1,5 +1,5 @@
-# USDS
-USDS Token contract. Uses UUPS upgradeable proxy pattern
+# GoUSD
+GoUSD Token contract. Uses UUPS upgradeable proxy pattern
 
 Roles:
 - owner: deploys the proxy
