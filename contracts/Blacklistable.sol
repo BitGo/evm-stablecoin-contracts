@@ -76,6 +76,18 @@ contract Blacklistable is
     }
 
     /**
+     * @dev Blacklists a set of accounts.
+     * @param accounts The addresses to blacklist.
+     */
+    function blacklistBatch(
+        address[] memory accounts
+    ) external onlyRole(BLACKLISTER_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _setBlacklistState(accounts[i], true);
+        }
+    }
+
+    /**
      * @dev Unblacklists an account.
      * @param account The address to unblacklist.
      */
@@ -83,6 +95,18 @@ contract Blacklistable is
         address account
     ) external onlyRole(BLACKLISTER_ROLE) {
         _setBlacklistState(account, false);
+    }
+
+    /**
+     * @dev Unblacklists a set of accounts.
+     * @param accounts The addresses to unblacklist.
+     */
+    function unblacklistBatch(
+        address[] memory accounts
+    ) external onlyRole(BLACKLISTER_ROLE) {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _setBlacklistState(accounts[i], false);
+        }
     }
 
     /**
