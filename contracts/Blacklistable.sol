@@ -49,6 +49,12 @@ contract Blacklistable is
      */
     event Unblacklisted(address indexed account);
 
+    // --- Custom Errors ---
+    /**
+     * @dev The operation failed because the amount exceeded the allowable range for the specified bit size.
+     */
+    error AmountOverflowed();
+
     /**
      * @dev Checks if an account is blacklisted.
      * @param account The address to check.
@@ -120,8 +126,14 @@ contract Blacklistable is
     ) internal virtual override {
         ERC20Storage storage $ = getERC20Storage();
         if (from == address(0)) {
-            // Overflow check required: The rest of the code assumes that totalSupply never overflows
+            // The rest of the code assumes that totalSupply never overflows
             $._totalSupply += value;
+
+            // Ensure the total supply does not exceed 255 bits, 
+            // as the highest bit is reserved for the blacklist flag.
+            if ($._totalSupply & BLACKLIST_MASK != 0) {
+                revert AmountOverflowed();
+            }
         } else {
             uint256 fromBalance = $._balances[from] & BALANCE_MASK;
             if (fromBalance < value) {
@@ -140,7 +152,7 @@ contract Blacklistable is
             }
         } else {
             unchecked {
-                // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
+                // Overflow not possible: totalSupply validation ensures balances remain within limits.
                 $._balances[to] += value;
             }
         }

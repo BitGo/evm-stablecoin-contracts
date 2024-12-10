@@ -148,11 +148,6 @@ contract USDS is
      * @dev The operation failed because the array lengths do not match.
      */
     error ArrayLengthsMismatch();
-    
-    /**
-     * @dev The operation failed because an int value doesn't fit in an uint of `bits` size.
-     */
-    error SafeCastOverflowedIntToUint();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -520,7 +515,7 @@ contract USDS is
 
         // check to prevent unsafe casting
         if (reserveFunds < 0) {
-            revert SafeCastOverflowedIntToUint();
+            revert AmountOverflowed();
         }
 
         reserve = uint256(reserveFunds);
