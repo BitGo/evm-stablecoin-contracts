@@ -14,6 +14,30 @@ contract Blacklistable is
     AccessControlDefaultAdminRulesUpgradeable,
     ERC20Upgradeable
 {
+    // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
+    // From OpenZeppelin Contracts
+    bytes32 private constant ERC20StorageLocation =
+        0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
+
+    // Constants for bitmask operations
+    /**
+     * @dev This keeps balance bits (clears blacklist bit).
+     */
+    uint256 private constant BALANCE_MASK = ~uint256(1 << 255);
+
+    /**
+     * @dev This represents blacklist bit.
+     */
+    uint256 private constant BLACKLIST_MASK = uint256(1 << 255);
+
+    /**
+     * @dev This role grants the ability to blacklist addresses, preventing them from
+     * performing certain actions or interacting with the contract.
+     * Additionally, this role allows the holder to unblacklist addresses,
+     * restoring their ability to interact with the contract.
+     */
+    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+
     // --- Events ---
     /**
      * @dev Emitted when an `account` is blacklisted.
@@ -25,19 +49,6 @@ contract Blacklistable is
      */
     event Unblacklisted(address indexed account);
 
-    // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
-    // From OpenZeppelin Contracts
-    bytes32 private constant ERC20StorageLocation =
-        0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
-
-    /**
-     * @dev This role grants the ability to blacklist addresses, preventing them from 
-     * performing certain actions or interacting with the contract. 
-     * Additionally, this role allows the holder to unblacklist addresses, 
-     * restoring their ability to interact with the contract.
-     */
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
-
     /**
      * @dev Checks if an account is blacklisted.
      * @param account The address to check.
@@ -45,7 +56,7 @@ contract Blacklistable is
      */
     function isBlacklisted(address account) public view returns (bool) {
         ERC20Storage storage $ = getERC20Storage();
-        return ($._balances[account] >> 255) == 1;
+        return ($._balances[account] & BLACKLIST_MASK) == BLACKLIST_MASK;
     }
 
     /**
@@ -77,7 +88,7 @@ contract Blacklistable is
         address account
     ) public view virtual override returns (uint256) {
         ERC20Storage storage $ = getERC20Storage();
-        return $._balances[account] & ((1 << 255) - 1);
+        return $._balances[account] & BALANCE_MASK;
     }
 
     /**
@@ -88,10 +99,10 @@ contract Blacklistable is
     function _setBlacklistState(address account, bool state) internal {
         ERC20Storage storage $ = getERC20Storage();
         if (state) {
-            $._balances[account] = $._balances[account] | (1 << 255);
+            $._balances[account] |= BLACKLIST_MASK; // Set blacklist bit
             emit Blacklisted(account);
         } else {
-            $._balances[account] = $._balances[account] & ((1 << 255) - 1);
+            $._balances[account] &= BALANCE_MASK; // Clear blacklist bit
             emit Unblacklisted(account);
         }
     }
@@ -112,21 +123,19 @@ contract Blacklistable is
             // Overflow check required: The rest of the code assumes that totalSupply never overflows
             $._totalSupply += value;
         } else {
-            uint256 fromBalance = $._balances[from] & ((1 << 255) - 1);
+            uint256 fromBalance = $._balances[from] & BALANCE_MASK;
             if (fromBalance < value) {
                 revert ERC20InsufficientBalance(from, fromBalance, value);
             }
             unchecked {
-                // Overflow not possible: value <= fromBalance <= totalSupply.
-                $._balances[from] =
-                    (fromBalance - value) |
-                    ($._balances[from] & (1 << 255));
+                // Underflow not possible: value <= fromBalance <= totalSupply.
+                $._balances[from] -= value;
             }
         }
 
         if (to == address(0)) {
             unchecked {
-                // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
+                // Underflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
                 $._totalSupply -= value;
             }
         } else {
