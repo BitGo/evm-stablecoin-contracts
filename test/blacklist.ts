@@ -86,6 +86,29 @@ describe("USDS blacklist", function () {
     expect(isBlacklisted).to.be.true;
   });
 
+  it("Should blacklist accounts in batch", async function () {
+    const accountsToBlacklist = [
+      "0x32FdfD2eA08d916B8f4e73d057E99bc3358b2F4D",
+      "0xECc966AB425F3F5Bd58085ce4eBDBf81D829126F",
+      "0x4cC9f0D4dAD08B15e5C5fb85f9e390B6cddA88Ba",
+    ];
+
+    await expect(
+      contractInstance.connect(blacklister).blacklistBatch(accountsToBlacklist)
+    )
+      .to.emit(contractInstance, "Blacklisted")
+      .withArgs("0x32FdfD2eA08d916B8f4e73d057E99bc3358b2F4D")
+      .to.emit(contractInstance, "Blacklisted")
+      .withArgs("0xECc966AB425F3F5Bd58085ce4eBDBf81D829126F")
+      .to.emit(contractInstance, "Blacklisted")
+      .withArgs("0x4cC9f0D4dAD08B15e5C5fb85f9e390B6cddA88Ba");
+
+    for (const account of accountsToBlacklist) {
+      const isBlacklisted = await contractInstance.isBlacklisted(account);
+      expect(isBlacklisted).to.be.true;
+    }
+  });
+
   it("Should unblacklist an account", async function () {
     await contractInstance
       .connect(blacklister)
@@ -103,6 +126,29 @@ describe("USDS blacklist", function () {
       .withArgs(targetAccount.address);
     isBlacklisted = await contractInstance.isBlacklisted(targetAccount.address);
     expect(isBlacklisted).to.be.false;
+  });
+
+  it("Should unblacklist accounts in batch", async function () {
+    const accountsToBlacklist = [
+      "0x32FdfD2eA08d916B8f4e73d057E99bc3358b2F4D",
+      "0xECc966AB425F3F5Bd58085ce4eBDBf81D829126F",
+      "0x4cC9f0D4dAD08B15e5C5fb85f9e390B6cddA88Ba",
+    ];
+
+    await expect(
+      contractInstance.connect(blacklister).unblacklistBatch(accountsToBlacklist)
+    )
+      .to.emit(contractInstance, "Unblacklisted")
+      .withArgs("0x32FdfD2eA08d916B8f4e73d057E99bc3358b2F4D")
+      .to.emit(contractInstance, "Unblacklisted")
+      .withArgs("0xECc966AB425F3F5Bd58085ce4eBDBf81D829126F")
+      .to.emit(contractInstance, "Unblacklisted")
+      .withArgs("0x4cC9f0D4dAD08B15e5C5fb85f9e390B6cddA88Ba");
+
+    for (const account of accountsToBlacklist) {
+      const isBlacklisted = await contractInstance.isBlacklisted(account);
+      expect(isBlacklisted).to.be.false;
+    }
   });
 
   it("Should not allow non-blacklister to blacklist", async function () {
