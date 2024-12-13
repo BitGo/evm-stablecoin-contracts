@@ -164,14 +164,14 @@ contract Blacklistable is
                 revert ERC20InsufficientBalance(from, fromBalance, value);
             }
             unchecked {
-                // Underflow not possible: value <= fromBalance <= totalSupply.
+                // Overflow not possible: value <= fromBalance.
                 $._balances[from] -= value;
             }
         }
 
         if (to == address(0)) {
             unchecked {
-                // Underflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
+                // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
                 $._totalSupply -= value;
             }
         } else {
