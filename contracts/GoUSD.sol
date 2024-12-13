@@ -506,12 +506,13 @@ contract GoUSD is
      */
     function getLatestReserveFromFeed(
         AggregatorV3Interface feed
-    ) internal view returns (uint256 reserve, uint256, uint8 feedDecimals) {
+    ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
+        int256 reserveFunds;
         (
             /* uint80 roundID */,
-            int256 reserveFunds,
+            reserveFunds,
             /* uint256 startedAt */,
-            uint256 updatedAt,
+            updatedAt,
             /* uint80 answeredInRound */
         ) = feed.latestRoundData();
 
