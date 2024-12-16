@@ -16,7 +16,7 @@ import "./Blacklistable.sol";
  * such as minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
  * UUPS (Universal Upgradeable Proxy Standard).
  * 
- * /// @custom:security-contact support@bitgo.com
+ * /// @custom:security-contact security@bitgo.com
  */
 contract GoUSD is
     Initializable,
