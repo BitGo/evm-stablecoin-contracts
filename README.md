@@ -34,6 +34,7 @@ ADMIN_ADDRESS=<...>
 BLACKLISTER_ADDRESS=<...>
 RESCUER_ADDRESS=<...>
 PROOF_FEED_ADDRESS=<...>
+DEFAULT_ADMIN_DELAY=<...>
 ```
 You can target any network from your Hardhat config using:
 

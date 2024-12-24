@@ -30,11 +30,14 @@ const config: HardhatUserConfig = {
       accounts: DEPLOYMENT_KEY? [`${DEPLOYMENT_KEY}`]: [],
       chainId: 17000,
     },
+    mainnet: {
+      url: `https://mainnet.etherscan.io/api`,
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 1,
+    },
   },
   etherscan: {
-    apiKey: {
-      holesky: `${ETHERSCAN_API_KEY}`,
-    },
+    apiKey: `${ETHERSCAN_API_KEY}`,
     customChains: [
       {
         network: 'holesky',
