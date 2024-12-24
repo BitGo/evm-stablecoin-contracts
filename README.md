@@ -35,6 +35,8 @@ BLACKLISTER_ADDRESS=<...>
 RESCUER_ADDRESS=<...>
 PROOF_FEED_ADDRESS=<...>
 DEFAULT_ADMIN_DELAY=<...>
+ALCHEMY_API_KEY=<...>
+```
 ```
 You can target any network from your Hardhat config using:
 
