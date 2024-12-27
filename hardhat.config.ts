@@ -31,7 +31,7 @@ const config: HardhatUserConfig = {
       chainId: 17000,
     },
     mainnet: {
-      url: `https://mainnet.etherscan.io/api`,
+      url: `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 1,
     },
