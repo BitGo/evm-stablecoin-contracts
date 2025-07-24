@@ -35,6 +35,11 @@ const config: HardhatUserConfig = {
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 1,
     },
+    hoodi: {
+      url: `https://rpc.hoodi.ethpandaops.io/`,
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 560048
+    }
   },
   etherscan: {
     apiKey: `${ETHERSCAN_API_KEY}`,
@@ -45,6 +50,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: 'https://api-holesky.etherscan.io/api',
           browserURL: 'https://holesky.etherscan.io'
+        }
+      },
+      {
+        network: 'hoodi',
+        chainId: 560048,
+        urls: {
+          apiURL: 'https://api-hoodi.etherscan.io/api',
+          browserURL: 'https://hoodi.etherscan.io'
         }
       },
     ],
