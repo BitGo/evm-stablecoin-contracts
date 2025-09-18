@@ -1,0 +1,20 @@
+---
+name: claude-code
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  claude-code:
+    name: Invoke Claude Code AI assistant
+    uses: BitGo/github-ai-assistant/.github/workflows/claude.yaml@v1
