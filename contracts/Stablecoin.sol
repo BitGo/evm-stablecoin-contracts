@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
@@ -65,16 +64,6 @@ contract Stablecoin is
     event Mint(address indexed to, uint256 amount);
 
     /**
-     * @dev Emitted when the proof of reserve feed is set to a new address.
-     */
-    event ProofOfReserveFeedSet(address newFeed);
-
-    /**
-     * @dev Emitted when the acceptable proof of reserve delay is updated.
-     */
-    event AcceptableProofOfReserveDelaySet(uint256 newTimeDelay);
-
-    /**
      * @dev Emitted when the mint cap per transaction is set to a new value.
      */
     event MintCapPerTransactionSet(uint256 newLimit);
@@ -91,39 +80,14 @@ contract Stablecoin is
     error InvalidAddress();
 
     /**
-     * @dev The operation failed because the provided time delay is invalid.
-     */
-    error InvalidTimeDelay();
-
-    /**
      * @dev The operation failed due to an invalid amount provided.
      */
     error InvalidAmount();
 
     /**
-     * @dev The operation failed because the number of decimals is invalid.
-     */
-    error InvalidDecimals();
-
-    /**
-     * @dev The operation failed due to invalid proof of reserve data.
-     */
-    error InvalidPoRData();
-
-    /**
-     * @dev The operation failed because the proof of reserve data is outdated.
-     */
-    error PoROutdated();
-
-    /**
      * @dev The operation failed because the transaction exceeds the mint cap per transaction.
      */
     error ExceedsMintTransactionCap();
-
-    /**
-     * @dev The operation failed because the supply exceeds the reserves.
-     */
-    error SupplyExceedsReserves();
 
     /**
      * @dev The operation failed because the sender is blacklisted.
@@ -159,14 +123,10 @@ contract Stablecoin is
     /**
      * @dev A struct for storing the namespaced storage related to the stablecoin.
      * It includes the following properties:
-     * - `proofOfReserveFeed`: The address of the aggregator contract used for proof of reserve data.
-     * - `acceptableProofOfReserveTimeDelay`: The time delay that is considered acceptable for proof of reserve updates.
      * - `mintCapPerTransaction`: The maximum allowable mint amount per transaction.
      * - `tokenDecimals`: The number of decimals for the token.
      */
     struct StablecoinStorage {
-        AggregatorV3Interface proofOfReserveFeed;
-        uint256 acceptableProofOfReserveTimeDelay;
         uint256 mintCapPerTransaction;
         uint8 tokenDecimals;
     }
@@ -183,7 +143,6 @@ contract Stablecoin is
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
-     * @param proofOfReserveAddress The address of the PoR feed.
      * @param defaultMintCap The default mint cap per transaction (in token's smallest unit).
      */
     function initialize(
@@ -197,7 +156,6 @@ contract Stablecoin is
         address upgrader,
         address blacklister,
         address rescuer,
-        address proofOfReserveAddress,
         uint256 defaultMintCap
     ) external initializer {
         __ERC20_init(tokenName, tokenSymbol);
@@ -210,49 +168,9 @@ contract Stablecoin is
         _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
-        if (proofOfReserveAddress == address(0)) revert InvalidAddress();
-        _getStablecoinStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
-        emit ProofOfReserveFeedSet(proofOfReserveAddress);
-        _getStablecoinStorage().acceptableProofOfReserveTimeDelay = 24 hours;
-        emit AcceptableProofOfReserveDelaySet(
-            _getStablecoinStorage().acceptableProofOfReserveTimeDelay
-        );
         _getStablecoinStorage().mintCapPerTransaction = defaultMintCap;
         emit MintCapPerTransactionSet(_getStablecoinStorage().mintCapPerTransaction);
         _getStablecoinStorage().tokenDecimals = tokenDecimals;
-    }
-
-    /**
-     * @dev Sets the proof of reserve feed address.
-     * Requirements:
-     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
-     * @param newFeedAddress The address of the new proof of reserve feed.
-     */
-    function setProofOfReserveFeed(
-        address newFeedAddress
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newFeedAddress == address(0)) revert InvalidAddress();
-
-        // verify feed is not stale before updating the feed address
-        AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
-        validateProofOfReserve(newFeed, 0, false);
-
-        _getStablecoinStorage().proofOfReserveFeed = newFeed;
-        emit ProofOfReserveFeedSet(newFeedAddress);
-    }
-
-    /**
-     * @dev Sets the time delay for the proof of reserve.
-     * Requirements:
-     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
-     * @param newTimeDelay The new time delay for the proof of reserve.
-     */
-    function setAcceptableProofOfReserveTimeDelay(
-        uint256 newTimeDelay
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newTimeDelay <= 0) revert InvalidTimeDelay();
-        _getStablecoinStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
-        emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
     /**
@@ -358,7 +276,6 @@ contract Stablecoin is
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(to)) revert RecipientBlacklisted();
         if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
-        validateProofOfReserve(_getStablecoinStorage().proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -373,15 +290,12 @@ contract Stablecoin is
         uint256[] memory amounts
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
-        uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
             if (amounts[i] > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
-            totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
             emit Mint(toAddresses[i], amounts[i]);
         }
-        validateProofOfReserve(_getStablecoinStorage().proofOfReserveFeed, totalAmount, true);
     }
 
     /**
@@ -421,37 +335,6 @@ contract Stablecoin is
     }
 
     /**
-     * @dev Retrieves the acceptable proofOfReserve time delay.
-     * @return The acceptable proofOfReserve time delay.
-     */
-    function getAcceptableProofOfReserveTimeDelay() external view returns (uint256) {
-        return _getStablecoinStorage().acceptableProofOfReserveTimeDelay;
-    }
-
-    /**
-     * @dev Retrieves the address of the ProofOfReserveFeed contract.
-     * @return The address of the ProofOfReserveFeed contract.
-     */
-    function getProofOfReserveFeed() external view returns (address) {
-        return address(_getStablecoinStorage().proofOfReserveFeed);
-    }
-
-    /**
-     * @dev Retrieves the latest reserve value from the proofOfReserveFeed.
-     * @return reserve The latest reserve value as a uint256.
-     * @return updatedAt The timestamp of the latest reserve value.
-     * @return decimalPrecision The number of decimals used by the feed.
-     */
-    function getLatestReserve()
-        public
-        view
-        returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
-    {
-        (reserve, updatedAt, decimalPrecision) = 
-                getLatestReserveFromFeed(_getStablecoinStorage().proofOfReserveFeed);
-    }
-
-    /**
      * @dev Returns the balance of the specified account.
      * @param account The address to check the balance of.
      * @return The balance of the specified account.
@@ -466,77 +349,6 @@ contract Stablecoin is
         returns (uint256)
     {
         return Blacklistable.balanceOf(account);
-    }
-
-    /**
-     * @dev Validates the proof of reserve.
-     * @param feed The address of the proofOfReserveFeed contract.
-     * @param mintAmount The amount of tokens to be minted.
-     * @param isBatch A boolean indicating whether the mint is a batch mint or not.
-     */
-    function validateProofOfReserve(
-        AggregatorV3Interface feed,
-        uint256 mintAmount,
-        bool isBatch
-    ) internal view {
-        (uint256 reserves, uint256 reserveUpdateAt, uint8 reserveDecimals) = getLatestReserveFromFeed(
-            feed
-        );
-
-        if (reserves <= 0) revert InvalidPoRData();
-        if (
-            block.timestamp >
-            (reserveUpdateAt +
-                _getStablecoinStorage().acceptableProofOfReserveTimeDelay)
-        ) revert PoROutdated();
-    
-        // Normalize reserves in case the number 
-        // of decimals reported by the feed is
-        // different than the token's decimals
-        uint256 currentSupply = totalSupply();
-        uint8 trueDecimals = decimals();
-        if (reserveDecimals < trueDecimals || reserveDecimals > 18) revert InvalidDecimals();
-        if (trueDecimals < reserveDecimals) {
-            reserves /= 10**uint256(reserveDecimals - trueDecimals);
-        }
-        // For batched minting, the mint operation is performed before validation.
-        // As a result, the minted amount is already included in `totalSupply` at this point.
-        // Therefore, in batch mode (`isBatch`), we only need to verify that `totalSupply`
-        // does not exceed the available `reserves`.
-        // In non-batch mode, the `mintAmount` is not yet included in `totalSupply`,
-        // so we need to ensure that `totalSupply + mintAmount` stays within `reserves`.
-        if (isBatch ? currentSupply > reserves : (currentSupply + mintAmount) > reserves) {
-            revert SupplyExceedsReserves();
-        }
-    }
-
-    /**
-     * @dev Retrieves the latest reserve value from the specified proofOfReserveFeed.
-     * @param feed The address of the proofOfReserveFeed contract.
-     * @return reserve The latest reserve value as a uint256.
-     * @return updatedAt The timestamp of the latest reserve value.
-     * @return feedDecimals The number of decimals used by the feed.
-     */
-    function getLatestReserveFromFeed(
-        AggregatorV3Interface feed
-    ) internal view returns (uint256 reserve, uint256 updatedAt, uint8 feedDecimals) {
-        int256 reserveFunds;
-        (
-            /* uint80 roundID */,
-            reserveFunds,
-            /* uint256 startedAt */,
-            updatedAt,
-            /* uint80 answeredInRound */
-        ) = feed.latestRoundData();
-
-        // check to prevent unsafe casting
-        if (reserveFunds < 0) {
-            revert AmountOverflowed();
-        }
-
-        reserve = uint256(reserveFunds);
-        feedDecimals = feed.decimals();
-        return (reserve, updatedAt, feedDecimals);
     }
 
     /**
