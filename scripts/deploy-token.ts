@@ -20,7 +20,6 @@ import { ethers, upgrades } from "hardhat";
  * - UPGRADER_ADDRESS: Address for upgrader role
  * - BLACKLISTER_ADDRESS: Address for blacklister role
  * - RESCUER_ADDRESS: Address for rescuer role
- * - PROOF_FEED_ADDRESS: Address for proof of reserve feed
  */
 async function main() {
   const tokenName = process.env.TOKEN_NAME;
@@ -56,7 +55,6 @@ async function main() {
     BLACKLISTER_ADDRESS,
     RESCUER_ADDRESS,
     DEFAULT_ADMIN_DELAY,
-    PROOF_FEED_ADDRESS,
   } = process.env;
 
   // Validate required environment variables
@@ -68,7 +66,6 @@ async function main() {
   if (!UPGRADER_ADDRESS) missingVars.push('UPGRADER_ADDRESS');
   if (!BLACKLISTER_ADDRESS) missingVars.push('BLACKLISTER_ADDRESS');
   if (!RESCUER_ADDRESS) missingVars.push('RESCUER_ADDRESS');
-  if (!PROOF_FEED_ADDRESS) missingVars.push('PROOF_FEED_ADDRESS');
 
   if (missingVars.length > 0) {
     throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
@@ -79,7 +76,6 @@ async function main() {
   console.log(`Token Decimals: ${tokenDecimals}`);
   console.log(`Default Mint Cap: ${defaultMintCap}`);
   console.log(`Admin: ${ADMIN_ADDRESS}`);
-  console.log(`Proof Feed: ${PROOF_FEED_ADDRESS}`);
 
   const instance = await upgrades.deployProxy(
     ContractFactory,
@@ -94,7 +90,6 @@ async function main() {
       UPGRADER_ADDRESS,
       BLACKLISTER_ADDRESS,
       RESCUER_ADDRESS,
-      PROOF_FEED_ADDRESS,
       defaultMintCap
     ],
     { 

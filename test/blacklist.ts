@@ -1,11 +1,10 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { DummyAggregatorV3, Stablecoin } from "../typechain-types";
+import { Stablecoin } from "../typechain-types";
 
 describe("blacklist", function () {
   let contractInstance: Stablecoin;
-  let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
   let supplyController: SignerWithAddress;
@@ -28,16 +27,6 @@ describe("blacklist", function () {
       targetAccount,
     ] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("Stablecoin");
-    const dummyAggregator =
-      await ethers.getContractFactory("DummyAggregatorV3");
-    const dummyAggregatorContract = await dummyAggregator.deploy(
-      6, // Decimals
-      "Dummy contract description",
-      1 // version
-    );
-    dummyAggregatorInstance =
-      (await dummyAggregatorContract.waitForDeployment()) as DummyAggregatorV3;
-    const dummyAggregatorAddress = await dummyAggregatorInstance.getAddress();
     const defaultAdminDelay = 7 * 24 * 60 * 60; // 7 days in seconds (or any appropriate value)
 
     const contract = await upgrades.deployProxy(
@@ -53,16 +42,11 @@ describe("blacklist", function () {
         upgrader.address,
         blacklister.address,
         withdrawer.address,
-        dummyAggregatorAddress,
         1000000 * (10 ** 6)
       ],
       { kind: "uups" }
     );
     contractInstance = (await contract.waitForDeployment()) as unknown as Stablecoin;
-    const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
-    await dummyAggregatorInstance
-      .connect(supplyController)
-      .updateData(1000000, 1, timeStampInSeconds, 1);
 
     // Mint tokens to reserve
     await contractInstance

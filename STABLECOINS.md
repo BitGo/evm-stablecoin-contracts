@@ -29,7 +29,6 @@ export SUPPLY_CONTROLLER_ADDRESS=0x3456789012345678901234567890123456789012
 export UPGRADER_ADDRESS=0x4567890123456789012345678901234567890123
 export BLACKLISTER_ADDRESS=0x5678901234567890123456789012345678901234
 export RESCUER_ADDRESS=0x6789012345678901234567890123456789012345
-export PROOF_FEED_ADDRESS=0x7890123456789012345678901234567890123456
 
 # Deploy to testnet first
 npx hardhat run scripts/deploy-token.ts --network sepolia
@@ -60,7 +59,7 @@ scripts/
 
 Contains all functionality with parameterized initialization:
 - ✅ ERC-20 token operations (transfer, approve, etc.)
-- ✅ Minting and burning with proof-of-reserve validation
+- ✅ Minting and burning capabilities
 - ✅ Pausable functionality (freeze/unfreeze transfers)
 - ✅ Blacklisting mechanism
 - ✅ Role-based access control (6 roles: Admin, Freezer, Supply Controller, Upgrader, Blacklister, Rescuer)
@@ -87,7 +86,6 @@ const instance = await upgrades.deployProxy(
         upgraderAddress,
         blacklisterAddress,
         rescuerAddress,
-        proofFeedAddress,
         defaultMintCap
     ],
     { kind: 'uups' }
@@ -113,7 +111,6 @@ Each deployment requires these environment variables:
 | `UPGRADER_ADDRESS` | Upgrade role | `0xdef0...` |
 | `BLACKLISTER_ADDRESS` | Blacklist role | `0x1357...` |
 | `RESCUER_ADDRESS` | Token rescue role | `0x2468...` |
-| `PROOF_FEED_ADDRESS` | PoR feed address | `0xabcd...` |
 
 ### Deployment Checklist
 
@@ -146,7 +143,6 @@ export SUPPLY_CONTROLLER_ADDRESS=0x...
 export UPGRADER_ADDRESS=0x...
 export BLACKLISTER_ADDRESS=0x...
 export RESCUER_ADDRESS=0x...
-export PROOF_FEED_ADDRESS=0x...
 
 # 2. Deploy
 npx hardhat run scripts/deploy-token.ts --network mainnet
@@ -158,7 +154,6 @@ npx hardhat run scripts/deploy-token.ts --network mainnet
 # Token Decimals: 6
 # Default Mint Cap: 1000000000000
 # Admin: 0x...
-# Proof Feed: 0x...
 # GoJPY Proxy deployed to: 0x...
 # GoJPY Implementation deployed to: 0x...
 
@@ -326,7 +321,6 @@ export SUPPLY_CONTROLLER_ADDRESS=0x789...
 export UPGRADER_ADDRESS=0xabc...
 export BLACKLISTER_ADDRESS=0xdef...
 export RESCUER_ADDRESS=0x012...
-export PROOF_FEED_ADDRESS=0x345...
 
 # 2. Compile
 npx hardhat compile

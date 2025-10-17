@@ -59,9 +59,6 @@ SUPPLY_CONTROLLER_ADDRESS=<supply-controller-wallet-address>
 UPGRADER_ADDRESS=<upgrader-wallet-address>
 BLACKLISTER_ADDRESS=<blacklister-wallet-address>
 RESCUER_ADDRESS=<rescuer-wallet-address>
-
-# Proof of Reserve Feed
-PROOF_FEED_ADDRESS=<chainlink-por-feed-address>
 ```
 
 ### Deploy Command

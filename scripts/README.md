@@ -18,7 +18,6 @@ SUPPLY_CONTROLLER_ADDRESS=0x... \
 UPGRADER_ADDRESS=0x... \
 BLACKLISTER_ADDRESS=0x... \
 RESCUER_ADDRESS=0x... \
-PROOF_FEED_ADDRESS=0x... \
 npx hardhat run scripts/deploy-token.ts --network mainnet
 ```
 
@@ -45,9 +44,6 @@ TOKEN_NAME=GoUSD PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --
 | `UPGRADER_ADDRESS` | Upgrade role | `0xdef0...` |
 | `BLACKLISTER_ADDRESS` | Blacklist role | `0x1357...` |
 | `RESCUER_ADDRESS` | Token rescue role | `0x2468...` |
-| `PROOF_FEED_ADDRESS` | PoR feed for USD | `0xabcd...` |
-| `PROOF_FEED_ADDRESS_EUR` | PoR feed for EUR | `0xef01...` |
-| `PROOF_FEED_ADDRESS_GBP` | PoR feed for GBP | `0x2345...` |
 
 ### Required for Upgrade
 
@@ -61,12 +57,14 @@ TOKEN_NAME=GoUSD PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --
 
 When you add a new token (e.g., `GoJPY`):
 
-1. **Create the contract** in `contracts/tokens/GoJPY.sol`
-2. **Add to config** in `config/tokens.json`
-3. **Deploy using generic script:**
+1. **Set the required environment variables**
+2. **Deploy using generic script:**
    ```bash
    TOKEN_NAME=GoJPY \
-   PROOF_FEED_ADDRESS_JPY=0x... \
+   TOKEN_SYMBOL=GoJPY \
+   TOKEN_DECIMALS=6 \
+   DEFAULT_MINT_CAP=1000000000000 \
+   ADMIN_ADDRESS=0x... \
    ... \
    npx hardhat run scripts/deploy-token.ts --network mainnet
    ```
@@ -94,7 +92,7 @@ When you add a new token (e.g., `GoJPY`):
 
 ### "Missing required environment variables"
 - Ensure all required environment variables are set
-- For USD tokens, use `PROOF_FEED_ADDRESS`
+- Check that TOKEN_NAME, TOKEN_SYMBOL, TOKEN_DECIMALS, and DEFAULT_MINT_CAP are all defined
 
 ### "Stack too deep" compilation error
 - This is already fixed in `hardhat.config.ts` with `viaIR: true`
