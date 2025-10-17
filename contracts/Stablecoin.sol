@@ -11,14 +11,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUp
 import "./Blacklistable.sol";
 
 /**
- * @title Official GoUSD ERC-20 Implementation
- * @dev This contract implements the ERC-20 standard for the GoUSD token, providing functionalities
- * such as minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
+ * @title Stablecoin - Generic stablecoin contract
+ * @dev This contract implements the core ERC-20 stablecoin functionality including:
+ * minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
  * UUPS (Universal Upgradeable Proxy Standard).
  * 
  * /// @custom:security-contact security@bitgo.com
  */
-contract GoUSD is
+contract Stablecoin is
     Initializable,
     Blacklistable,
     ERC20PausableUpgradeable,
@@ -27,8 +27,9 @@ contract GoUSD is
 {
     using SafeERC20 for IERC20;
 
-    // keccak256(abi.encode(uint256(keccak256("contract.storage.GoUSD")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant GoUSDStorageLocation = 0x9ca604c58ab95c30482ed3a32180df5a32334be7c88a6ba06098b0ad31c6c500;
+    // keccak256(abi.encode(uint256(keccak256("contract.storage.Stablecoin")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant StablecoinStorageLocation = 
+                    0x9b2d10d13c5ae4f59a8184d905810047d3ab7f6fe6302078b828a0112a6ab900;
 
     // --- Roles ---
     /**
@@ -156,20 +157,25 @@ contract GoUSD is
 
     // --- Namespaced Storage ---
     /**
-     * @dev A struct for storing the namespaced storage related to the GoUSD token.
+     * @dev A struct for storing the namespaced storage related to the stablecoin.
      * It includes the following properties:
      * - `proofOfReserveFeed`: The address of the aggregator contract used for proof of reserve data.
      * - `acceptableProofOfReserveTimeDelay`: The time delay that is considered acceptable for proof of reserve updates.
      * - `mintCapPerTransaction`: The maximum allowable mint amount per transaction.
+     * - `tokenDecimals`: The number of decimals for the token.
      */
-    struct GoUSDStorage {
+    struct StablecoinStorage {
         AggregatorV3Interface proofOfReserveFeed;
         uint256 acceptableProofOfReserveTimeDelay;
         uint256 mintCapPerTransaction;
+        uint8 tokenDecimals;
     }
 
     /**
-     * @dev Initializes the GoUSD contract.
+     * @dev Initializes the Stablecoin contract with the specified parameters.
+     * @param tokenName The name of the token
+     * @param tokenSymbol The symbol of the token
+     * @param tokenDecimals The number of decimals for the token (e.g., 6).
      * @param defaultAdmin The address of the default admin.
      * @param defaultAdminDelay The delay (in seconds) before the default admin can be changed.
      * @param freezer The address of the freezer role.
@@ -178,8 +184,12 @@ contract GoUSD is
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
      * @param proofOfReserveAddress The address of the PoR feed.
+     * @param defaultMintCap The default mint cap per transaction (in token's smallest unit).
      */
     function initialize(
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint8 tokenDecimals,
         address defaultAdmin,
         uint48 defaultAdminDelay,
         address freezer,
@@ -187,11 +197,12 @@ contract GoUSD is
         address upgrader,
         address blacklister,
         address rescuer,
-        address proofOfReserveAddress
+        address proofOfReserveAddress,
+        uint256 defaultMintCap
     ) external initializer {
-        __ERC20_init("GoUSD", "GoUSD");
+        __ERC20_init(tokenName, tokenSymbol);
         __ERC20Pausable_init();
-        __ERC20Permit_init("GoUSD");
+        __ERC20Permit_init(tokenName);
         __UUPSUpgradeable_init();
         __AccessControlDefaultAdminRules_init(defaultAdminDelay, defaultAdmin);
         _grantRole(BLACKLISTER_ROLE, blacklister);
@@ -200,14 +211,15 @@ contract GoUSD is
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
         if (proofOfReserveAddress == address(0)) revert InvalidAddress();
-        _getGoUSDStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
+        _getStablecoinStorage().proofOfReserveFeed = AggregatorV3Interface(proofOfReserveAddress);
         emit ProofOfReserveFeedSet(proofOfReserveAddress);
-        _getGoUSDStorage().acceptableProofOfReserveTimeDelay = 24 hours;
+        _getStablecoinStorage().acceptableProofOfReserveTimeDelay = 24 hours;
         emit AcceptableProofOfReserveDelaySet(
-            _getGoUSDStorage().acceptableProofOfReserveTimeDelay
+            _getStablecoinStorage().acceptableProofOfReserveTimeDelay
         );
-        _getGoUSDStorage().mintCapPerTransaction = 1000000 * (10 ** 6); // Default limit set to 1 million tokens
-        emit MintCapPerTransactionSet(_getGoUSDStorage().mintCapPerTransaction);
+        _getStablecoinStorage().mintCapPerTransaction = defaultMintCap;
+        emit MintCapPerTransactionSet(_getStablecoinStorage().mintCapPerTransaction);
+        _getStablecoinStorage().tokenDecimals = tokenDecimals;
     }
 
     /**
@@ -225,7 +237,7 @@ contract GoUSD is
         AggregatorV3Interface newFeed = AggregatorV3Interface(newFeedAddress);
         validateProofOfReserve(newFeed, 0, false);
 
-        _getGoUSDStorage().proofOfReserveFeed = newFeed;
+        _getStablecoinStorage().proofOfReserveFeed = newFeed;
         emit ProofOfReserveFeedSet(newFeedAddress);
     }
 
@@ -239,7 +251,7 @@ contract GoUSD is
         uint256 newTimeDelay
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newTimeDelay <= 0) revert InvalidTimeDelay();
-        _getGoUSDStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
+        _getStablecoinStorage().acceptableProofOfReserveTimeDelay = newTimeDelay;
         emit AcceptableProofOfReserveDelaySet(newTimeDelay);
     }
 
@@ -253,7 +265,7 @@ contract GoUSD is
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newLimit <= 0) revert InvalidAmount();
-        _getGoUSDStorage().mintCapPerTransaction = newLimit;
+        _getStablecoinStorage().mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
     }
 
@@ -345,8 +357,8 @@ contract GoUSD is
         uint256 amount
     ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
         if (isBlacklisted(to)) revert RecipientBlacklisted();
-        if (amount > _getGoUSDStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
-        validateProofOfReserve(_getGoUSDStorage().proofOfReserveFeed, amount, false);
+        if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+        validateProofOfReserve(_getStablecoinStorage().proofOfReserveFeed, amount, false);
         _mint(to, amount);
         emit Mint(to, amount);
     }
@@ -363,13 +375,13 @@ contract GoUSD is
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > _getGoUSDStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+            if (amounts[i] > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
             emit Mint(toAddresses[i], amounts[i]);
         }
-        validateProofOfReserve(_getGoUSDStorage().proofOfReserveFeed, totalAmount, true);
+        validateProofOfReserve(_getStablecoinStorage().proofOfReserveFeed, totalAmount, true);
     }
 
     /**
@@ -397,7 +409,7 @@ contract GoUSD is
         override(ERC20Upgradeable)
         returns (uint8)
     {
-        return 6;
+        return _getStablecoinStorage().tokenDecimals;
     }
 
     /**
@@ -405,7 +417,7 @@ contract GoUSD is
      * @return The mint cap per transaction.
      */
     function getMintCapPerTransaction() external view returns (uint256) {
-        return _getGoUSDStorage().mintCapPerTransaction;
+        return _getStablecoinStorage().mintCapPerTransaction;
     }
 
     /**
@@ -413,7 +425,7 @@ contract GoUSD is
      * @return The acceptable proofOfReserve time delay.
      */
     function getAcceptableProofOfReserveTimeDelay() external view returns (uint256) {
-        return _getGoUSDStorage().acceptableProofOfReserveTimeDelay;
+        return _getStablecoinStorage().acceptableProofOfReserveTimeDelay;
     }
 
     /**
@@ -421,7 +433,7 @@ contract GoUSD is
      * @return The address of the ProofOfReserveFeed contract.
      */
     function getProofOfReserveFeed() external view returns (address) {
-        return address(_getGoUSDStorage().proofOfReserveFeed);
+        return address(_getStablecoinStorage().proofOfReserveFeed);
     }
 
     /**
@@ -435,7 +447,8 @@ contract GoUSD is
         view
         returns (uint256 reserve, uint256 updatedAt, uint8 decimalPrecision)
     {
-        (reserve, updatedAt, decimalPrecision) = getLatestReserveFromFeed(_getGoUSDStorage().proofOfReserveFeed);
+        (reserve, updatedAt, decimalPrecision) = 
+                getLatestReserveFromFeed(_getStablecoinStorage().proofOfReserveFeed);
     }
 
     /**
@@ -474,7 +487,7 @@ contract GoUSD is
         if (
             block.timestamp >
             (reserveUpdateAt +
-                _getGoUSDStorage().acceptableProofOfReserveTimeDelay)
+                _getStablecoinStorage().acceptableProofOfReserveTimeDelay)
         ) revert PoROutdated();
     
         // Normalize reserves in case the number 
@@ -558,14 +571,14 @@ contract GoUSD is
     }
 
     /**
-     * @dev Fetches the namespaced storage structure for the GoUSD contract.
+     * @dev Fetches the namespaced storage structure for the Stablecoin contract.
      * This function uses EIP-7201-style namespaced storage to ensure compatibility
      * and extensibility for upgradeable contracts.
-     * @return $ The `GoUSDStorage` struct containing storage variables specific to the GoUSD contract.
+     * @return $ The `StablecoinStorage` struct containing storage variables specific to the stablecoin contract.
      */
-    function _getGoUSDStorage() private pure returns (GoUSDStorage storage $) {
+    function _getStablecoinStorage() private pure returns (StablecoinStorage storage $) {
         assembly {
-            $.slot := GoUSDStorageLocation
+            $.slot := StablecoinStorageLocation
         }
     }
 }
