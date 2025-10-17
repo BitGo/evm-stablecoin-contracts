@@ -1,10 +1,10 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { DummyAggregatorV3, GoUSD } from "../typechain-types";
+import { DummyAggregatorV3, Stablecoin } from "../typechain-types";
 
-describe("GoUSD pause", function () {
-  let contractInstance: GoUSD;
+describe("pause", function () {
+  let contractInstance: Stablecoin;
   let dummyAggregatorInstance: DummyAggregatorV3;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
@@ -24,7 +24,7 @@ describe("GoUSD pause", function () {
       reserve,
       withdrawer
     ] = await ethers.getSigners();
-    const ContractFactory = await ethers.getContractFactory("GoUSD");
+    const ContractFactory = await ethers.getContractFactory("Stablecoin");
     const dummyAggregator =
       await ethers.getContractFactory("DummyAggregatorV3");
     const dummyAggregatorContract = await dummyAggregator.deploy(
@@ -39,6 +39,9 @@ describe("GoUSD pause", function () {
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
+        "GoUSD",
+        "GoUSD",
+        6,
         defaultAdmin.address,
         defaultAdminDelay,
         freezer.address,
@@ -47,10 +50,11 @@ describe("GoUSD pause", function () {
         blacklister.address,
         withdrawer.address,
         dummyAggregatorAddress,
+        1000000 * (10 ** 6)
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as GoUSD;
+    contractInstance = (await contract.waitForDeployment()) as unknown as Stablecoin;
 
     const timeStampInSeconds = Math.floor(new Date().getTime() / 1000);
     await dummyAggregatorInstance
