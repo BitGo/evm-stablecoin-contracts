@@ -7,19 +7,22 @@ describe("blacklist", function () {
   let contractInstance: Stablecoin;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
-  let supplyController: SignerWithAddress;
+  let masterMinter: SignerWithAddress;
+  let minter: SignerWithAddress;
   let upgrader: SignerWithAddress;
   let reserve: SignerWithAddress;
   let blacklister: SignerWithAddress;
   let targetAccount: SignerWithAddress;
   let withdrawer: SignerWithAddress;
   const addressZero = "0x0000000000000000000000000000000000000000";
+  const DAILY_LIMIT = ethers.parseUnits("10000000", 6); // 10M tokens daily limit
 
   before(async function () {
     [
       defaultAdmin,
       freezer,
-      supplyController,
+      masterMinter,
+      minter,
       upgrader,
       blacklister,
       reserve,
@@ -38,7 +41,7 @@ describe("blacklist", function () {
         defaultAdmin.address,
         defaultAdminDelay,
         freezer.address,
-        supplyController.address,
+        masterMinter.address,
         upgrader.address,
         blacklister.address,
         withdrawer.address,
@@ -48,9 +51,12 @@ describe("blacklist", function () {
     );
     contractInstance = (await contract.waitForDeployment()) as unknown as Stablecoin;
 
+    // Configure minter with high limits for testing
+    await contractInstance.connect(masterMinter).configureMinter(minter.address, DAILY_LIMIT, DAILY_LIMIT);
+
     // Mint tokens to reserve
     await contractInstance
-      .connect(supplyController)
+      .connect(minter)
       .mint(reserve.address, 1000);
   });
 
@@ -287,7 +293,7 @@ describe("blacklist", function () {
     expect(receiverBalanceBefore).to.equal(receiverBalanceAfter);
   });
 
-  it("Should allow supply controller role to destroy blacklisted funds", async function () {
+  it("Should allow master minter role to destroy blacklisted funds", async function () {
     // Blacklist receiver
     await contractInstance
       .connect(blacklister)
@@ -300,13 +306,13 @@ describe("blacklist", function () {
     // Destroy blacklisted funds
     await expect(
       contractInstance
-        .connect(supplyController)
+        .connect(masterMinter)
         .destroyBlacklistedFunds(targetAccount.address)
     )
       .to.emit(contractInstance, "Transfer")
       .withArgs(targetAccount.address, addressZero, 750)
-      .to.emit(contractInstance, "Burn")
-      .withArgs(targetAccount.address, 750);
+      .to.emit(contractInstance, "BurnNative")
+      .withArgs(masterMinter.address, targetAccount.address, 750);
     const targetBalanceAfter = await contractInstance.balanceOf(
       targetAccount.address
     );
@@ -318,10 +324,10 @@ describe("blacklist", function () {
     expect(isBlacklisted).to.be.true;
   });
 
-  it("Should prevent non-blacklister from destroying blacklisted funds", async function () {
+  it("Should prevent non-master-minter from destroying blacklisted funds", async function () {
     // Blacklist receiver
     await contractInstance
-      .connect(supplyController)
+      .connect(minter)
       .mint(targetAccount.address, 1000);
     await contractInstance
       .connect(blacklister)
@@ -331,7 +337,7 @@ describe("blacklist", function () {
     );
     expect(targetBalance).to.equal(1000);
 
-    // Attempt to destroy blacklisted funds by a non-blacklister
+    // Attempt to destroy blacklisted funds by a non-master-minter
     try {
       await contractInstance
         .connect(defaultAdmin)
@@ -357,7 +363,7 @@ describe("blacklist", function () {
     // Attempt to mint tokens to the blacklisted address
     try {
       await contractInstance
-        .connect(supplyController)
+        .connect(minter)
         .mint(targetAccount.address, 100);
     } catch (error) {
       expect(error).to.be.an("error");
