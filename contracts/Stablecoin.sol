@@ -811,6 +811,7 @@ contract Stablecoin is
     ) public virtual override returns (bool) {
         if (isBlacklisted(_msgSender())) revert SpenderBlacklisted();
         if (isBlacklisted(from)) revert SenderBlacklisted();
+        if (isBlacklisted(to)) revert RecipientBlacklisted();
         return super.transferFrom(from, to, value);
     }
 
@@ -825,6 +826,7 @@ contract Stablecoin is
         uint256 value
     ) public virtual override returns (bool) {
         if (isBlacklisted(_msgSender())) revert SenderBlacklisted();
+        if (isBlacklisted(to)) revert RecipientBlacklisted();
         return super.transfer(to, value);
     }
 

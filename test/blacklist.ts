@@ -222,34 +222,40 @@ describe("blacklist", function () {
     expect(receiverBalance).to.equal(500);
   });
 
-  it("Should allow transfers to blacklisted addresses", async function () {
+  it("Should not allow transfers to blacklisted addresses", async function () {
     // Blacklist receiver
     await contractInstance
       .connect(blacklister)
       .blacklist(targetAccount.address);
 
+    // Check balances before attempting transfer
+    const senderBalanceBefore = await contractInstance.balanceOf(reserve.address);
+    const receiverBalanceBefore = await contractInstance.balanceOf(
+      targetAccount.address
+    );
+
     // Attempt to transfer tokens to blacklisted receiver
-    await contractInstance
-      .connect(reserve)
-      .transfer(targetAccount.address, 250);
+    try {
+      await contractInstance
+        .connect(reserve)
+        .transfer(targetAccount.address, 250);
+    } catch (error) {
+      expect(error).to.be.an("error");
+    }
 
-    let isBlacklisted = await contractInstance.isBlacklisted(
+    const isBlacklisted = await contractInstance.isBlacklisted(
       targetAccount.address
     );
     expect(isBlacklisted).to.be.true;
 
-    // Check balances
-    const senderBalance = await contractInstance.balanceOf(reserve.address);
-    const receiverBalance = await contractInstance.balanceOf(
+    // Check balances after failed transfer - they should remain unchanged
+    const senderBalanceAfter = await contractInstance.balanceOf(reserve.address);
+    const receiverBalanceAfter = await contractInstance.balanceOf(
       targetAccount.address
     );
 
-    expect(senderBalance).to.equal(250);
-    expect(receiverBalance).to.equal(750);
-
-    // Should still be blacklisted after transfer
-    isBlacklisted = await contractInstance.isBlacklisted(targetAccount.address);
-    expect(isBlacklisted).to.be.true;
+    expect(senderBalanceBefore).to.equal(senderBalanceAfter);
+    expect(receiverBalanceBefore).to.equal(receiverBalanceAfter);
   });
 
   it("Should prevent blacklisted address from performing transferFrom", async function () {
@@ -301,7 +307,7 @@ describe("blacklist", function () {
     const targetBalance = await contractInstance.balanceOf(
       targetAccount.address
     );
-    expect(targetBalance).to.equal(750);
+    expect(targetBalance).to.equal(500);
 
     // Destroy blacklisted funds
     await expect(
@@ -310,9 +316,9 @@ describe("blacklist", function () {
         .destroyBlacklistedFunds(targetAccount.address)
     )
       .to.emit(contractInstance, "Transfer")
-      .withArgs(targetAccount.address, addressZero, 750)
+      .withArgs(targetAccount.address, addressZero, 500)
       .to.emit(contractInstance, "BurnNative")
-      .withArgs(masterMinter.address, targetAccount.address, 750);
+      .withArgs(masterMinter.address, targetAccount.address, 500);
     const targetBalanceAfter = await contractInstance.balanceOf(
       targetAccount.address
     );
