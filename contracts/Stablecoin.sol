@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./Blacklistable.sol";
+import "./ISupplyValidator.sol";
 
 /**
  * @title Stablecoin - Generic stablecoin contract
@@ -105,6 +106,11 @@ contract Stablecoin is
      */
     mapping(address => MinterConfig) public bridgeMinters;
 
+    /**
+     * @dev Address of the supply validator contract
+     */
+    address internal _supplyValidator;
+
     // --- Events ---
     /**
      * @dev Emitted when tokens are minted natively (backed by collateral, treasury operations).
@@ -162,6 +168,11 @@ contract Stablecoin is
      * @dev Emitted when tokens are rescued from the token address and sent to a `recipient` address.
      */
     event TokensRescued(address indexed token, address indexed recipient, uint256 amount);
+
+    /**
+     * @dev Emitted when the supply validator address is updated.
+     */
+    event SupplyValidatorUpdated(address indexed oldValidator, address indexed newValidator);
 
     // --- Custom Errors ---
     /**
@@ -511,6 +522,12 @@ contract Stablecoin is
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientMinterAllowance();
         
+        // Run supply validator if it is set
+        address validator = _supplyValidator;
+        if (validator != address(0)) {
+            ISupplyValidator(validator).validateMint(to, amount, msg.sender, isBridge);
+        }
+        
         _useMinterLimits(msg.sender, amount, isBridge);
         _mint(to, amount);
         
@@ -541,6 +558,12 @@ contract Stablecoin is
         
         uint256 currentLimit = _getBurningCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientBurnerAllowance();
+        
+        // Run supply validator if it is set
+        address validator = _supplyValidator;
+        if (validator != address(0)) {
+            ISupplyValidator(validator).validateBurn(from, amount, msg.sender, isBridge);
+        }
         
         _useBurnerLimits(msg.sender, amount, isBridge);
         _burn(from, amount);
@@ -777,6 +800,26 @@ contract Stablecoin is
         if (isBlacklisted(recipient)) revert RecipientBlacklisted();
         token.safeTransfer(recipient, amount);
         emit TokensRescued(address(token), recipient, amount);
+    }
+
+    /**
+     * @dev Sets the supply validator contract address.
+     * Requirements:
+     * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * @param newValidator The address of the new supply validator contract.
+     */
+    function setSupplyValidator(address newValidator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        address oldValidator = _supplyValidator;
+        _supplyValidator = newValidator;
+        emit SupplyValidatorUpdated(oldValidator, newValidator);
+    }
+
+    /**
+     * @dev Gets the supply validator contract address.
+     * @return The address of the supply validator contract.
+     */
+    function getSupplyValidator() external view returns (address) {
+        return _supplyValidator;
     }
 
     /**
