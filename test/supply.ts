@@ -7,7 +7,8 @@ describe("Minting,  Burning And Token Rescue", function () {
   let contractInstance: Stablecoin;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
-  let supplyController: SignerWithAddress;
+  let masterMinter: SignerWithAddress;
+  let minter: SignerWithAddress;
   let upgrader: SignerWithAddress;
   let reserve1: SignerWithAddress;
   let reserve2: SignerWithAddress;
@@ -17,12 +18,14 @@ describe("Minting,  Burning And Token Rescue", function () {
   let recoverAddress: SignerWithAddress;
   let randomAddress: SignerWithAddress;
   const addressZero = "0x0000000000000000000000000000000000000000";
+  const DAILY_LIMIT = ethers.parseUnits("10000000", 6); // 10M tokens daily limit
 
   before(async function () {
     [
       defaultAdmin,
       freezer,
-      supplyController,
+      masterMinter,
+      minter,
       upgrader,
       blacklister,
       reserve1,
@@ -43,7 +46,7 @@ describe("Minting,  Burning And Token Rescue", function () {
         defaultAdmin.address,
         defaultAdminDelay,
         freezer.address,
-        supplyController.address,
+        masterMinter.address,
         upgrader.address,
         blacklister.address,
         rescuer.address,
@@ -52,6 +55,9 @@ describe("Minting,  Burning And Token Rescue", function () {
       { kind: "uups" }
     );
     contractInstance = (await contract.waitForDeployment()) as unknown as Stablecoin;
+    
+    // Configure minter with high limits for testing
+    await contractInstance.connect(masterMinter).configureMinter(minter.address, DAILY_LIMIT, DAILY_LIMIT);
   });
 
   it("Should have 0 total supply on init and unpaused", async function () {
@@ -63,17 +69,17 @@ describe("Minting,  Burning And Token Rescue", function () {
 
   it("Should fail to mint tokens exceeding max mint limit", async function () {
     // Set mint amount greater than the maxMintLimit
-    const mintAmount = ethers.parseUnits("2000000", 18); // 2 million tokens (assuming maxMintLimit is 1 million)
+    const mintAmount = ethers.parseUnits("2000000", 6); // 2 million tokens (exceeds 1M per-tx cap)
 
     await expect(
       contractInstance
-        .connect(supplyController)
+        .connect(minter)
         .mint(randomAddress.address, mintAmount)
-    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap()");
+    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
   });
 
   it("Should update the max mint limit successfully through setter function", async function () {
-    const newPerTransactionCap = ethers.parseUnits("2000000", 18); // 2 million tokens
+    const newPerTransactionCap = ethers.parseUnits("2000000", 6); // 2 million tokens
 
     // Update the max mint limit using the setter function
     await expect(contractInstance
@@ -87,41 +93,41 @@ describe("Minting,  Burning And Token Rescue", function () {
     expect(currentMaxMintLimit).to.equal(newPerTransactionCap);
 
     // Attempt to mint exceeding the updated limit and expect it to fail
-    const exceedingMintAmount = ethers.parseUnits("2500000", 18); // 2.5 million tokens
+    const exceedingMintAmount = ethers.parseUnits("2500000", 6); // 2.5 million tokens
     await expect(
-      contractInstance.connect(supplyController).mint(randomAddress.address, exceedingMintAmount)
-    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap()");
+      contractInstance.connect(minter).mint(randomAddress.address, exceedingMintAmount)
+    ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
   });
 
   it("Should fail to update the max mint limit to zero", async function () {
-    const zeroCap = ethers.parseUnits("0", 18); // Zero tokens
+    const zeroCap = ethers.parseUnits("0", 6); // Zero tokens
 
     // Attempt to update the max mint limit to zero and expect it to fail
     await expect(
       contractInstance.connect(defaultAdmin).setMintCapPerTransaction(zeroCap)
-    ).to.be.revertedWithCustomError(contractInstance, "InvalidAmount()");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidAmount");
   });
 
   it("Should mint tokens successfully to any external address", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
+    const mintAmount = ethers.parseUnits("1000", 6);
     await expect(
       contractInstance
-        .connect(supplyController)
+        .connect(minter)
         .mint(randomAddress.address, mintAmount)
     )
       .to.emit(contractInstance, "Transfer")
       .withArgs(addressZero, randomAddress.address, mintAmount)
-      .to.emit(contractInstance, "Mint")
-      .withArgs(randomAddress.address, mintAmount);
+      .to.emit(contractInstance, "MintNative")
+      .withArgs(minter.address, randomAddress.address, mintAmount);
     const balance = await contractInstance.balanceOf(randomAddress.address);
     expect(balance).to.equal(mintAmount);
     expect(await contractInstance.totalSupply()).to.equal(mintAmount);
   });
 
   it("Should be able to recover tokens stuck in contract address", async function () {
-    const transferAmount = ethers.parseUnits("1000", 18);
+    const transferAmount = ethers.parseUnits("1000", 6);
     await contractInstance
-      .connect(supplyController)
+      .connect(minter)
       .mint(reserve3.address, transferAmount);
     const balanceAfterTransfer = await contractInstance.balanceOf(
       reserve3.address
@@ -159,7 +165,7 @@ describe("Minting,  Burning And Token Rescue", function () {
     const newTokenContractBalance = await contractInstance.balanceOf(
       contractInstance.getAddress()
     );
-    expect(newTokenContractBalance).to.equal(ethers.parseUnits("0", 18));
+    expect(newTokenContractBalance).to.equal(ethers.parseUnits("0", 6));
     const balanceAtRecoverAddress = await contractInstance.balanceOf(
       recoverAddress.address
     );
@@ -167,7 +173,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
   
   it("Should fail to rescue tokens when called by unauthorized address", async function() {
-    const transferAmount = ethers.parseUnits("1000", 18);
+    const transferAmount = ethers.parseUnits("1000", 6);
   
     await expect(
       contractInstance.connect(randomAddress).rescueTokens(
@@ -179,7 +185,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
   
   it("Should fail to rescue tokens to address zero", async function() {
-    const transferAmount = ethers.parseUnits("1000", 18);
+    const transferAmount = ethers.parseUnits("1000", 6);
   
     await expect(
       contractInstance.connect(rescuer).rescueTokens(
@@ -187,7 +193,7 @@ describe("Minting,  Burning And Token Rescue", function () {
         addressZero,
         transferAmount
       )
-    ).to.be.revertedWithCustomError(contractInstance, "InvalidAddress()");
+    ).to.be.revertedWithCustomError(contractInstance, "InvalidAddress");
   });
   
   it("Should fail to rescue zero tokens", async function() {
@@ -201,23 +207,23 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
   
   it("Should fail to rescue tokens to blacklisted address", async function() {
-    const transferAmount = ethers.parseUnits("1000", 18);
+    const transferAmount = ethers.parseUnits("1000", 6);
     
     // Blacklist the recipient address
-    await contractInstance.connect(blacklister).blacklist(recoverAddress.address);
+    await contractInstance.connect(blacklister).blacklist(reserve2.address);
   
     await expect(
       contractInstance.connect(rescuer).rescueTokens(
         contractInstance.getAddress(),
-        recoverAddress.address,
+        reserve2.address,
         transferAmount
       )
     ).to.be.revertedWithCustomError(contractInstance, "RecipientBlacklisted");
-    await contractInstance.connect(blacklister).unblacklist(recoverAddress.address);
+    await contractInstance.connect(blacklister).unblacklist(reserve2.address);
   });
 
   it("Should fail to mint tokens when called by unauthorized address", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
+    const mintAmount = ethers.parseUnits("1000", 6);
     let failed = false;
     try {
       // Attempt to mint tokens by an unauthorized signer (e.g., defaultAdmin)
@@ -232,21 +238,21 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
 
   it("Should burn tokens successfully from an address", async function () {
-    const burnAmount = ethers.parseUnits("500", 18);
+    const burnAmount = ethers.parseUnits("500", 6);
     await contractInstance
-      .connect(supplyController)
+      .connect(minter)
       .mint(reserve1.address, burnAmount);
     const totalSupply = await contractInstance.totalSupply();
     const initialBalance = await contractInstance.balanceOf(reserve1.address);
     await expect(
       contractInstance
-        .connect(supplyController)
+        .connect(minter)
         .burn(reserve1.address, burnAmount)
     )
       .to.emit(contractInstance, "Transfer")
       .withArgs(reserve1.address, addressZero, burnAmount)
-      .to.emit(contractInstance, "Burn")
-      .withArgs(reserve1.address, burnAmount);
+      .to.emit(contractInstance, "BurnNative")
+      .withArgs(minter.address, reserve1.address, burnAmount);
     const finalBalance = await contractInstance.balanceOf(reserve1.address);
     expect(finalBalance).to.equal(initialBalance - burnAmount);
     expect(await contractInstance.totalSupply()).to.equal(
@@ -255,7 +261,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
 
   it("Should fail to burn tokens when called by unauthorized address", async function () {
-    const burnAmount = ethers.parseUnits("500", 18);
+    const burnAmount = ethers.parseUnits("500", 6);
     let failed = false;
     try {
       // Attempt to burn tokens by an unauthorized signer (e.g., defaultAdmin)
@@ -270,7 +276,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
 
   it("Should mint tokens successfully in batch to multiple external addresses", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
+    const mintAmount = ethers.parseUnits("1000", 6);
     const addresses = [
       "0x32FdfD2eA08d916B8f4e73d057E99bc3358b2F4D",
       "0xECc966AB425F3F5Bd58085ce4eBDBf81D829126F",
@@ -279,16 +285,16 @@ describe("Minting,  Burning And Token Rescue", function () {
     const amounts = [mintAmount, mintAmount * 2n, mintAmount * 3n];
 
     await expect(
-      contractInstance.connect(supplyController).mintBatch(addresses, amounts)
+      contractInstance.connect(minter).mintBatch(addresses, amounts)
     )
       .to.emit(contractInstance, "Transfer")
       .withArgs(addressZero, addresses[0], mintAmount)
-      .to.emit(contractInstance, "Mint")
-      .withArgs(addresses[0], mintAmount)
+      .to.emit(contractInstance, "MintNative")
+      .withArgs(minter.address, addresses[0], mintAmount)
       .to.emit(contractInstance, "Transfer")
       .withArgs(addressZero, addresses[1], mintAmount * 2n)
-      .to.emit(contractInstance, "Mint")
-      .withArgs(addresses[1], mintAmount * 2n)
+      .to.emit(contractInstance, "MintNative")
+      .withArgs(minter.address, addresses[1], mintAmount * 2n)
       .to.emit(contractInstance, "Transfer")
       .withArgs(addressZero, addresses[2], mintAmount * 3n);
 
@@ -299,7 +305,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
 
   it("Should fail to mint tokens in batch when called by unauthorized address", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
+    const mintAmount = ethers.parseUnits("1000", 6);
     const addresses = [reserve1.address, reserve2.address, reserve3.address];
     const amounts = [mintAmount, mintAmount, mintAmount];
     let failed = false;
@@ -318,7 +324,7 @@ describe("Minting,  Burning And Token Rescue", function () {
   });
 
   it("Should fail to mint tokens if address array and amount array length doesn't match", async function () {
-    const mintAmount = ethers.parseUnits("1000", 18);
+    const mintAmount = ethers.parseUnits("1000", 6);
     const addresses = [reserve1.address, reserve2.address];
     const amounts = [mintAmount, mintAmount, mintAmount];
     let failed = false;
@@ -326,7 +332,7 @@ describe("Minting,  Burning And Token Rescue", function () {
     try {
       // Attempt to mint tokens when address array and amount array length doesn't match
       await contractInstance
-        .connect(supplyController)
+        .connect(minter)
         .mintBatch(addresses, amounts);
     } catch (error) {
       failed = true;

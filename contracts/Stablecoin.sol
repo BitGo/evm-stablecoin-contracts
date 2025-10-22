@@ -12,8 +12,9 @@ import "./Blacklistable.sol";
 /**
  * @title Stablecoin - Generic stablecoin contract
  * @dev This contract implements the core ERC-20 stablecoin functionality including:
- * minting, pausing, blacklisting, and permit-based approvals. It is also upgradeable through
- * UUPS (Universal Upgradeable Proxy Standard).
+ * rate-limited minting/burning, pausing, blacklisting, and permit-based approvals. 
+ * It differentiates between native mints (backed by collateral) and bridge mints (cross-chain).
+ * It is upgradeable through UUPS (Universal Upgradeable Proxy Standard).
  * 
  * /// @custom:security-contact security@bitgo.com
  */
@@ -30,6 +31,17 @@ contract Stablecoin is
     bytes32 private constant StablecoinStorageLocation = 
                     0x9b2d10d13c5ae4f59a8184d905810047d3ab7f6fe6302078b828a0112a6ab900;
 
+    /**
+     * @notice The duration it takes for the limits to fully replenish
+     */
+    uint256 private constant _DURATION = 1 days;
+
+    /**
+     * @notice Minimum limit to prevent precision loss in rate calculations
+     * @dev This ensures ratePerSecond is always >= 1 (1 token per second minimum)
+     */
+    uint256 private constant _MIN_LIMIT = 86400; // 1 day in seconds
+
     // --- Roles ---
     /**
      * @dev This role grants the ability to freeze or unfreeze all token transfers within the contract.
@@ -37,10 +49,20 @@ contract Stablecoin is
     bytes32 public constant FREEZER_ROLE = keccak256("FREEZER_ROLE");
 
     /**
-     * @dev This role is responsible for managing the token supply, 
-     * including minting, burning or destroying blacklisted funds.
+     * @dev This role is responsible for administering minters and bridge minters,
+     * including setting limits and destroying blacklisted funds.
      */
-    bytes32 public constant SUPPLY_CONTROLLER_ROLE = keccak256("SUPPLY_CONTROLLER_ROLE");
+    bytes32 public constant MASTER_MINTER_ROLE = keccak256("MASTER_MINTER_ROLE");
+
+    /**
+     * @dev This role allows minting and burning tokens for native operations (backed by collateral, treasury).
+     */
+    bytes32 public constant MINTER = keccak256("MINTER");
+
+    /**
+     * @dev This role allows minting and burning tokens for cross-chain bridge operations.
+     */
+    bytes32 public constant BRIDGE_MINTER = keccak256("BRIDGE_MINTER");
 
     /**
      * @dev This role allows to upgrade the contract, typically for implementing new features or bug fixes.
@@ -52,21 +74,89 @@ contract Stablecoin is
      */
     bytes32 public constant RESCUER_ROLE = keccak256("RESCUER_ROLE");
 
-    // --- Events ---
+    // --- Structs ---
     /**
-     * @dev Emitted when tokens are burned from the `from` address.
+     * @dev Parameters for minting or burning limits
      */
-    event Burn(address indexed from, uint256 amount);
+    struct MinterParams {
+        uint256 maxLimit;           // Maximum tokens per day
+        uint256 currentLimit;       // Currently available capacity
+        uint256 timestamp;          // Last update timestamp
+        uint256 ratePerSecond;      // Replenishment rate
+    }
 
     /**
-     * @dev Emitted when tokens are minted to the `to` address.
+     * @dev Minter configuration with separate mint and burn limits
      */
-    event Mint(address indexed to, uint256 amount);
+    struct MinterConfig {
+        MinterParams minterParams;
+        MinterParams burnerParams;
+        bool isConfigured;
+    }
+
+    // --- Storage Mappings ---
+    /**
+     * @dev Maps native minter addresses to their configurations
+     */
+    mapping(address => MinterConfig) public minters;
+
+    /**
+     * @dev Maps bridge minter addresses to their configurations
+     */
+    mapping(address => MinterConfig) public bridgeMinters;
+
+    // --- Events ---
+    /**
+     * @dev Emitted when tokens are minted natively (backed by collateral, treasury operations).
+     */
+    event MintNative(address indexed minter, address indexed to, uint256 amount);
+
+    /**
+     * @dev Emitted when tokens are burned natively.
+     */
+    event BurnNative(address indexed minter, address indexed from, uint256 amount);
+
+    /**
+     * @dev Emitted when tokens are minted via a bridge.
+     */
+    event MintBridge(address indexed bridge, address indexed to, uint256 amount);
+
+    /**
+     * @dev Emitted when tokens are burned via a bridge.
+     */
+    event BurnBridge(address indexed bridge, address indexed from, uint256 amount);
+
+    /**
+     * @dev Emitted when a native minter is configured.
+     */
+    event MinterConfigured(address indexed minter, uint256 mintLimit, uint256 burnLimit);
+
+    /**
+     * @dev Emitted when a bridge minter is configured.
+     */
+    event BridgeMinterConfigured(address indexed bridge, uint256 mintLimit, uint256 burnLimit);
+
+    /**
+     * @dev Emitted when a native minter is removed.
+     */
+    event MinterRemoved(address indexed minter);
+
+    /**
+     * @dev Emitted when a bridge minter is removed.
+     */
+    event BridgeMinterRemoved(address indexed bridge);
 
     /**
      * @dev Emitted when the mint cap per transaction is set to a new value.
      */
     event MintCapPerTransactionSet(uint256 newLimit);
+    
+    /**
+     * @dev Emitted when an existing minter's limits are updated.
+     */
+    event MinterLimitsUpdated(
+        address indexed minter, uint256 newMintLimit, uint256 newBurnLimit, bool indexed isBridge
+        );
 
     /**
      * @dev Emitted when tokens are rescued from the token address and sent to a `recipient` address.
@@ -114,6 +204,66 @@ contract Stablecoin is
      */
     error ArrayLengthsMismatch();
 
+    /**
+     * @dev The operation failed because the minter is not configured.
+     */
+    error MinterNotConfigured();
+
+    /**
+     * @dev The operation failed because the bridge minter is not configured.
+     */
+    error BridgeMinterNotConfigured();
+
+    /**
+     * @dev The operation failed because the minter has insufficient allowance.
+     */
+    error InsufficientMinterAllowance();
+
+    /**
+     * @dev The operation failed because the burner has insufficient allowance.
+     */
+    error InsufficientBurnerAllowance();
+
+    /**
+     * @dev The operation failed because the limits are set too high (overflow protection).
+     */
+    error LimitsTooHigh();
+
+    /**
+     * @dev The operation failed because the limit is below the minimum required.
+     */
+    error LimitTooLow();
+
+    /**
+     * @dev The operation failed because the account is already a minter.
+     */
+    error AccountAlreadyMinter();
+
+    /**
+     * @dev The operation failed because the account is already a bridge minter.
+     */
+    error AccountAlreadyBridgeMinter();
+
+    /**
+     * @dev The operation failed because the account is not configured as a minter.
+     */
+    error AccountNotConfiguredAsMinter();
+
+    /**
+     * @dev The operation failed because the account is not configured as a bridge minter.
+     */
+    error AccountNotConfiguredAsBridgeMinter();
+
+    /**
+     * @dev The operation failed because the account does not have the minter role.
+     */
+    error AccountMissingMinterRole();
+
+    /**
+     * @dev The operation failed because the account does not have the bridge minter role.
+     */
+    error AccountMissingBridgeMinterRole();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -139,7 +289,7 @@ contract Stablecoin is
      * @param defaultAdmin The address of the default admin.
      * @param defaultAdminDelay The delay (in seconds) before the default admin can be changed.
      * @param freezer The address of the freezer role.
-     * @param supplyController The address of the supply controller role.
+     * @param masterMinter The address of the master minter role.
      * @param upgrader The address of the upgrader role.
      * @param blacklister The address of the blacklister role.
      * @param rescuer The address of the rescuer role.
@@ -152,7 +302,7 @@ contract Stablecoin is
         address defaultAdmin,
         uint48 defaultAdminDelay,
         address freezer,
-        address supplyController,
+        address masterMinter,
         address upgrader,
         address blacklister,
         address rescuer,
@@ -165,13 +315,437 @@ contract Stablecoin is
         __AccessControlDefaultAdminRules_init(defaultAdminDelay, defaultAdmin);
         _grantRole(BLACKLISTER_ROLE, blacklister);
         _grantRole(FREEZER_ROLE, freezer);
-        _grantRole(SUPPLY_CONTROLLER_ROLE, supplyController);
+        _grantRole(MASTER_MINTER_ROLE, masterMinter);
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
         _getStablecoinStorage().mintCapPerTransaction = defaultMintCap;
         emit MintCapPerTransactionSet(_getStablecoinStorage().mintCapPerTransaction);
         _getStablecoinStorage().tokenDecimals = tokenDecimals;
     }
+
+    // --- Master Minter Functions ---
+
+    /**
+     * @dev Internal function to configure a minter with mint and burn limits.
+     * @param account The address of the minter/bridge to configure.
+     * @param mintLimit The daily minting limit.
+     * @param burnLimit The daily burning limit.
+     * @param isBridge Whether this is a bridge minter or a native minter.
+     */
+    function _configureMinterInternal(
+        address account,
+        uint256 mintLimit,
+        uint256 burnLimit,
+        bool isBridge
+    ) internal {
+        if (account == address(0)) revert InvalidAddress();
+        if (mintLimit > (type(uint256).max / 2) || burnLimit > (type(uint256).max / 2)) {
+            revert LimitsTooHigh();
+        }
+        
+        // Validate minimum limits to prevent precision loss
+        if (mintLimit < _MIN_LIMIT) revert LimitTooLow();
+        if (burnLimit < _MIN_LIMIT) revert LimitTooLow();
+
+        // Check that an account can't have both roles simultaneously
+        if (isBridge && hasRole(MINTER, account)) {
+            revert AccountAlreadyMinter();
+        }
+        
+        if (!isBridge && hasRole(BRIDGE_MINTER, account)) {
+            revert AccountAlreadyBridgeMinter();
+        }
+
+        bool isUpdate = false;
+        
+        if (isBridge) {
+            if (bridgeMinters[account].isConfigured) {
+                isUpdate = true;
+            } else {
+                bridgeMinters[account].isConfigured = true;
+                _grantRole(BRIDGE_MINTER, account);
+            }
+        } else {
+            if (minters[account].isConfigured) {
+                isUpdate = true;
+            } else {
+                minters[account].isConfigured = true;
+                _grantRole(MINTER, account);
+            }
+        }
+        
+        _changeMinterLimit(account, mintLimit, isBridge);
+        _changeBurnerLimit(account, burnLimit, isBridge);
+        
+        if (isUpdate) {
+            emit MinterLimitsUpdated(account, mintLimit, burnLimit, isBridge);
+        } else {
+            if (isBridge) {
+                emit BridgeMinterConfigured(account, mintLimit, burnLimit);
+            } else {
+                emit MinterConfigured(account, mintLimit, burnLimit);
+            }
+        }
+    }
+
+    /**
+     * @dev Configures a native minter with mint and burn limits.
+     * @param minter The address of the minter to configure.
+     * @param mintLimit The daily minting limit.
+     * @param burnLimit The daily burning limit.
+     */
+    function configureMinter(
+        address minter,
+        uint256 mintLimit,
+        uint256 burnLimit
+    ) external onlyRole(MASTER_MINTER_ROLE) {
+        _configureMinterInternal(minter, mintLimit, burnLimit, false);
+    }
+
+    /**
+     * @dev Configures a bridge minter with mint and burn limits.
+     * @param bridge The address of the bridge to configure.
+     * @param mintLimit The daily minting limit.
+     * @param burnLimit The daily burning limit.
+     */
+    function configureBridgeMinter(
+        address bridge,
+        uint256 mintLimit,
+        uint256 burnLimit
+    ) external onlyRole(MASTER_MINTER_ROLE) {
+        _configureMinterInternal(bridge, mintLimit, burnLimit, true);
+    }
+
+    /**
+     * @dev Internal function to remove a minter or bridge minter.
+     * @param account The address of the minter/bridge to remove.
+     * @param isBridge Whether this is a bridge minter or a native minter.
+     */
+    function _removeMinterInternal(address account, bool isBridge) internal {
+        MinterConfig storage config = isBridge ? bridgeMinters[account] : minters[account];
+
+        // Check if the account is configured and has the role
+        if (!config.isConfigured) {
+            if (isBridge) {
+                revert AccountNotConfiguredAsBridgeMinter();
+            } else {
+                revert AccountNotConfiguredAsMinter();
+            }
+        }
+
+        if (!hasRole(isBridge ? BRIDGE_MINTER : MINTER, account)) {
+            if (isBridge) {
+                revert AccountMissingBridgeMinterRole();
+            } else {
+                revert AccountMissingMinterRole();
+            }
+        }
+
+        config.isConfigured = false;
+        config.minterParams.maxLimit = 0;
+        config.minterParams.currentLimit = 0;
+        config.burnerParams.maxLimit = 0;
+        config.burnerParams.currentLimit = 0;
+
+        _revokeRole(isBridge ? BRIDGE_MINTER : MINTER, account);
+
+        if (isBridge) {
+            emit BridgeMinterRemoved(account);
+        } else {
+            emit MinterRemoved(account);
+        }
+    }
+
+    /**
+     * @dev Removes a native minter.
+     * @param minter The address of the minter to remove.
+     */
+    function removeMinter(address minter) external onlyRole(MASTER_MINTER_ROLE) {
+        _removeMinterInternal(minter, false);
+    }
+
+    /**
+     * @dev Removes a bridge minter.
+     * @param bridge The address of the bridge to remove.
+     */
+    function removeBridgeMinter(address bridge) external onlyRole(MASTER_MINTER_ROLE) {
+        _removeMinterInternal(bridge, true);
+    }
+
+    /**
+     * @dev Destroys blacklisted funds.
+     * @param account The address of the account with blacklisted funds.
+     */
+    function destroyBlacklistedFunds(
+        address account
+    ) external onlyRole(MASTER_MINTER_ROLE) {
+        if (!isBlacklisted(account)) revert SenderNotBlacklisted();
+        uint256 balance = balanceOf(account);
+        _burn(account, balance);
+        emit BurnNative(msg.sender, account, balance);
+    }
+
+    // --- Minter Functions (Native) ---
+
+    // --- Internal Mint/Burn Implementation ---
+    
+    /**
+     * @dev Internal function for minting tokens with proper checks and limits.
+     * @param to The address to which the new tokens will be minted.
+     * @param amount The amount of tokens to be minted.
+     * @param isBridge Whether this is a bridge mint operation.
+     */
+    function _mintTokens(address to, uint256 amount, bool isBridge) internal {
+        if (isBlacklisted(to)) revert RecipientBlacklisted();
+        if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+        
+        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
+        if (!config.isConfigured) {
+            if (isBridge) {
+                revert BridgeMinterNotConfigured();
+            } else {
+                revert MinterNotConfigured();
+            }
+        }
+        
+        uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
+        if (currentLimit < amount) revert InsufficientMinterAllowance();
+        
+        _useMinterLimits(msg.sender, amount, isBridge);
+        _mint(to, amount);
+        
+        if (isBridge) {
+            emit MintBridge(msg.sender, to, amount);
+        } else {
+            emit MintNative(msg.sender, to, amount);
+        }
+    }
+    
+    /**
+     * @dev Internal function for burning tokens with proper checks and limits.
+     * @param from The address from which the tokens will be burned.
+     * @param amount The amount of tokens to be burned.
+     * @param isBridge Whether this is a bridge burn operation.
+     */
+    function _burnTokens(address from, uint256 amount, bool isBridge) internal {
+        if (isBlacklisted(from)) revert SenderBlacklisted();
+        
+        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
+        if (!config.isConfigured) {
+            if (isBridge) {
+                revert BridgeMinterNotConfigured();
+            } else {
+                revert MinterNotConfigured();
+            }
+        }
+        
+        uint256 currentLimit = _getBurningCurrentLimit(msg.sender, isBridge);
+        if (currentLimit < amount) revert InsufficientBurnerAllowance();
+        
+        _useBurnerLimits(msg.sender, amount, isBridge);
+        _burn(from, amount);
+        
+        if (isBridge) {
+            emit BurnBridge(msg.sender, from, amount);
+        } else {
+            emit BurnNative(msg.sender, from, amount);
+        }
+    }
+    
+    /**
+     * @dev Internal function for batch minting tokens with proper checks and limits.
+     * Gas optimized: calculates limit once, validates all inputs, then mints all tokens.
+     * @param toAddresses The addresses to which the new tokens will be minted.
+     * @param amounts The amounts of tokens to be minted for each address.
+     * @param isBridge Whether this is a bridge mint operation.
+     */
+    function _mintTokensBatch(address[] memory toAddresses, uint256[] memory amounts, bool isBridge) internal {
+        if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
+        
+        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
+        if (!config.isConfigured) {
+            if (isBridge) {
+                revert BridgeMinterNotConfigured();
+            } else {
+                revert MinterNotConfigured();
+            }
+        }
+        
+        // Calculate current limit once for gas optimization
+        uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
+        uint256 totalAmount = 0;
+        uint256 perTxCap = _getStablecoinStorage().mintCapPerTransaction;
+        
+        // First pass: validate all inputs and calculate total
+        for (uint256 i = 0; i < toAddresses.length; i++) {
+            if (amounts[i] > perTxCap) revert ExceedsMintTransactionCap();
+            if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
+            totalAmount += amounts[i];
+        }
+        
+        // Check total against limit once
+        if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
+        
+        // Second pass: mint tokens and emit events
+        for (uint256 i = 0; i < toAddresses.length; i++) {
+            _mint(toAddresses[i], amounts[i]);
+            
+            if (isBridge) {
+                emit MintBridge(msg.sender, toAddresses[i], amounts[i]);
+            } else {
+                emit MintNative(msg.sender, toAddresses[i], amounts[i]);
+            }
+        }
+        
+        // Update limit once at the end
+        _useMinterLimits(msg.sender, totalAmount, isBridge);
+    }
+    
+    // --- Minter Functions (Native) ---
+    
+    /**
+     * @dev Mints new tokens natively (backed by collateral, treasury operations).
+     * @param to The address to which the new tokens will be minted.
+     * @param amount The amount of tokens to be minted.
+     */
+    function mint(address to, uint256 amount) external onlyRole(MINTER) {
+        _mintTokens(to, amount, false);
+    }
+    
+    /**
+     * @dev Burns tokens natively.
+     * @param from The address from which the tokens will be burned.
+     * @param amount The amount of tokens to be burned.
+     */
+    function burn(address from, uint256 amount) external onlyRole(MINTER) {
+        _burnTokens(from, amount, false);
+    }
+    
+    /**
+     * @dev Mints new tokens natively to a set of addresses.
+     * @param toAddresses The addresses to which the new tokens will be minted.
+     * @param amounts The amounts of tokens to be minted for each address.
+     */
+    function mintBatch(address[] memory toAddresses, uint256[] memory amounts) external onlyRole(MINTER) {
+        _mintTokensBatch(toAddresses, amounts, false);
+    }
+    
+    // --- Bridge Minter Functions ---
+    
+    /**
+     * @dev Mints tokens via a bridge for cross-chain operations.
+     * @param to The address to which the new tokens will be minted.
+     * @param amount The amount of tokens to be minted.
+     */
+    function bridgeMint(address to, uint256 amount) external onlyRole(BRIDGE_MINTER) {
+        _mintTokens(to, amount, true);
+    }
+    
+    /**
+     * @dev Burns tokens via a bridge for cross-chain operations.
+     * @param from The address from which the tokens will be burned.
+     * @param amount The amount of tokens to be burned.
+     */
+    function bridgeBurn(address from, uint256 amount) external onlyRole(BRIDGE_MINTER) {
+        _burnTokens(from, amount, true);
+    }
+    
+    /**
+     * @dev Mints tokens via a bridge to a set of addresses.
+     * @param toAddresses The addresses to which the new tokens will be minted.
+     * @param amounts The amounts of tokens to be minted for each address.
+     */
+    function bridgeMintBatch(address[] memory toAddresses, uint256[] memory amounts) external onlyRole(BRIDGE_MINTER) {
+        _mintTokensBatch(toAddresses, amounts, true);
+    }
+
+    // --- View Functions ---
+
+    /**
+     * @dev Returns the maximum minting limit for a minter.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The maximum minting limit.
+     */
+    function mintingMaxLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        if (isBridge) {
+            return bridgeMinters[minter].minterParams.maxLimit;
+        } else {
+            return minters[minter].minterParams.maxLimit;
+        }
+    }
+
+    /**
+     * @dev Returns the maximum burning limit for a minter.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The maximum burning limit.
+     */
+    function burningMaxLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        if (isBridge) {
+            return bridgeMinters[minter].burnerParams.maxLimit;
+        } else {
+            return minters[minter].burnerParams.maxLimit;
+        }
+    }
+
+    /**
+     * @dev Returns the current available minting limit for a minter.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The current minting limit.
+     */
+    function mintingCurrentLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        return _getMintingCurrentLimit(minter, isBridge);
+    }
+
+    /**
+     * @dev Returns the current available burning limit for a minter.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The current burning limit.
+     */
+    function burningCurrentLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        return _getBurningCurrentLimit(minter, isBridge);
+    }
+
+    /**
+     * @dev Checks if an address is a configured native minter.
+     * @param account The address to check.
+     * @return True if the address is a configured minter.
+     */
+    function isMinter(address account) external view returns (bool) {
+        return minters[account].isConfigured;
+    }
+
+    /**
+     * @dev Checks if an address is a configured bridge minter.
+     * @param account The address to check.
+     * @return True if the address is a configured bridge minter.
+     */
+    function isBridgeMinter(address account) external view returns (bool) {
+        return bridgeMinters[account].isConfigured;
+    }
+
+    /**
+     * @dev Returns the current minting allowance (alias for mintingCurrentLimitOf).
+     * @param minter The address of the minter.
+     * @return The current minting allowance.
+     */
+    function minterAllowance(address minter) external view returns (uint256) {
+        return _getMintingCurrentLimit(minter, false);
+    }
+
+    /**
+     * @dev Returns the current minting allowance for a bridge (alias for mintingCurrentLimitOf).
+     * @param bridge The address of the bridge.
+     * @return The current minting allowance.
+     */
+    function bridgeMinterAllowance(address bridge) external view returns (uint256) {
+        return _getMintingCurrentLimit(bridge, true);
+    }
+
+    // --- Admin Functions ---
 
     /**
      * @dev Sets the mint cap per transaction.
@@ -185,19 +759,6 @@ contract Stablecoin is
         if (newLimit <= 0) revert InvalidAmount();
         _getStablecoinStorage().mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
-    }
-
-    /**
-     * @dev Destroys blacklisted funds.
-     * @param account The address of the account with blacklisted funds.
-     */
-    function destroyBlacklistedFunds(
-        address account
-    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        if (!isBlacklisted(account)) revert SenderNotBlacklisted();
-        uint256 balance = balanceOf(account);
-        _burn(account, balance);
-        emit Burn(account, balance);
     }
 
     /**
@@ -232,6 +793,8 @@ contract Stablecoin is
         _unpause();
     }
 
+    // --- ERC20 Overrides ---
+
     /**
      * @dev Transfers `value` tokens from `from` to `to` address 
      * using the allowance mechanism. `value` is then deducted 
@@ -263,54 +826,6 @@ contract Stablecoin is
     ) public virtual override returns (bool) {
         if (isBlacklisted(_msgSender())) revert SenderBlacklisted();
         return super.transfer(to, value);
-    }
-
-    /**
-     * @dev Mints new tokens and assigns them to an address.
-     * @param to The address to which the new tokens will be minted.
-     * @param amount The amount of tokens to be minted.
-     */
-    function mint(
-        address to,
-        uint256 amount
-    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        if (isBlacklisted(to)) revert RecipientBlacklisted();
-        if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
-        _mint(to, amount);
-        emit Mint(to, amount);
-    }
-
-    /**
-     * @dev Mints new tokens and assigns them to a set of addresses.
-     * @param toAddresses The addresses to which the new tokens will be minted.
-     * @param amounts The amounts of tokens to be minted for each address.
-     */
-    function mintBatch(
-        address[] memory toAddresses,
-        uint256[] memory amounts
-    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
-        for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
-            if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
-            _mint(toAddresses[i], amounts[i]);
-            emit Mint(toAddresses[i], amounts[i]);
-        }
-    }
-
-    /**
-     * @dev Burns tokens from `from` address. Action is restricted 
-     * to the supply controller role.
-     * @param from The address from which the tokens will be burned.
-     * @param amount The amount of tokens to be burned.
-     */
-    function burn(
-        address from,
-        uint256 amount
-    ) external onlyRole(SUPPLY_CONTROLLER_ROLE) {
-        if (isBlacklisted(from)) revert SenderBlacklisted();
-        _burn(from, amount);
-        emit Burn(from, amount);
     }
 
     /**
@@ -351,6 +866,8 @@ contract Stablecoin is
         return Blacklistable.balanceOf(account);
     }
 
+    // --- Internal Functions ---
+
     /**
      * @dev Authorizes the upgrade to a new implementation contract.
      * @param newImplementation The address of the new implementation contract.
@@ -373,13 +890,165 @@ contract Stablecoin is
         internal
         override(Blacklistable, ERC20Upgradeable, ERC20PausableUpgradeable)
     {
-        // This will trigger the ERC20PausableUpgradeable._update
-        // enforcing the pausable feature and then
-        // will trigger the Blacklistable._update
-        // since ERC20PausableUpgradeable is inherited after Blacklistable
-        // This won't trigger the ERC20Upgradeable._update
-        // since we are not calling super._update in Blacklistable._update
         ERC20PausableUpgradeable._update(from, to, value);
+    }
+
+    /**
+     * @dev Gets the current minting limit for a minter, accounting for time-based replenishment.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The current minting limit.
+     */
+    function _getMintingCurrentLimit(address minter, bool isBridge) internal view returns (uint256) {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        return _getCurrentLimit(
+            config.minterParams.currentLimit,
+            config.minterParams.maxLimit,
+            config.minterParams.timestamp,
+            config.minterParams.ratePerSecond
+        );
+    }
+
+    /**
+     * @dev Gets the current burning limit for a minter, accounting for time-based replenishment.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @return The current burning limit.
+     */
+    function _getBurningCurrentLimit(address minter, bool isBridge) internal view returns (uint256) {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        return _getCurrentLimit(
+            config.burnerParams.currentLimit,
+            config.burnerParams.maxLimit,
+            config.burnerParams.timestamp,
+            config.burnerParams.ratePerSecond
+        );
+    }
+
+    /**
+     * @dev Calculates the current limit with time-based replenishment.
+     * @param currentLimit The current limit value.
+     * @param maxLimit The maximum limit value.
+     * @param timestamp The last update timestamp.
+     * @param ratePerSecond The replenishment rate per second.
+     * @return limit The calculated current limit.
+     */
+    function _getCurrentLimit(
+        uint256 currentLimit,
+        uint256 maxLimit,
+        uint256 timestamp,
+        uint256 ratePerSecond
+    ) internal view returns (uint256 limit) {
+        limit = currentLimit;
+        if (limit == maxLimit) {
+            return limit;
+        } else if (timestamp + _DURATION <= block.timestamp) {
+            limit = maxLimit;
+        } else if (timestamp + _DURATION > block.timestamp) {
+            uint256 timePassed = block.timestamp - timestamp;
+            uint256 calculatedLimit = limit + (timePassed * ratePerSecond);
+            limit = calculatedLimit > maxLimit ? maxLimit : calculatedLimit;
+        }
+    }
+
+    /**
+     * @dev Uses the minter's limit by reducing the current limit.
+     * @param minter The address of the minter.
+     * @param amount The amount to reduce from the limit.
+     * @param isBridge Whether this is a bridge minter.
+     */
+    function _useMinterLimits(address minter, uint256 amount, bool isBridge) internal {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        uint256 currentLimit = _getCurrentLimit(
+            config.minterParams.currentLimit,
+            config.minterParams.maxLimit,
+            config.minterParams.timestamp,
+            config.minterParams.ratePerSecond
+        );
+        config.minterParams.timestamp = block.timestamp;
+        config.minterParams.currentLimit = currentLimit - amount;
+    }
+
+    /**
+     * @dev Uses the burner's limit by reducing the current limit.
+     * @param minter The address of the minter.
+     * @param amount The amount to reduce from the limit.
+     * @param isBridge Whether this is a bridge minter.
+     */
+    function _useBurnerLimits(address minter, uint256 amount, bool isBridge) internal {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        uint256 currentLimit = _getCurrentLimit(
+            config.burnerParams.currentLimit,
+            config.burnerParams.maxLimit,
+            config.burnerParams.timestamp,
+            config.burnerParams.ratePerSecond
+        );
+        config.burnerParams.timestamp = block.timestamp;
+        config.burnerParams.currentLimit = currentLimit - amount;
+    }
+
+    /**
+     * @dev Updates the minting limit for a minter.
+     * @param minter The address of the minter.
+     * @param limit The new limit value.
+     * @param isBridge Whether this is a bridge minter.
+     */
+    function _changeMinterLimit(address minter, uint256 limit, bool isBridge) internal {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        uint256 oldLimit = config.minterParams.maxLimit;
+        uint256 currentLimit = _getCurrentLimit(
+            config.minterParams.currentLimit,
+            config.minterParams.maxLimit,
+            config.minterParams.timestamp,
+            config.minterParams.ratePerSecond
+        );
+        config.minterParams.maxLimit = limit;
+        config.minterParams.currentLimit = _calculateNewCurrentLimit(limit, oldLimit, currentLimit);
+        config.minterParams.ratePerSecond = limit / _DURATION;
+        config.minterParams.timestamp = block.timestamp;
+    }
+
+    /**
+     * @dev Updates the burning limit for a minter.
+     * @param minter The address of the minter.
+     * @param limit The new limit value.
+     * @param isBridge Whether this is a bridge minter.
+     */
+    function _changeBurnerLimit(address minter, uint256 limit, bool isBridge) internal {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        uint256 oldLimit = config.burnerParams.maxLimit;
+        uint256 currentLimit = _getCurrentLimit(
+            config.burnerParams.currentLimit,
+            config.burnerParams.maxLimit,
+            config.burnerParams.timestamp,
+            config.burnerParams.ratePerSecond
+        );
+        config.burnerParams.maxLimit = limit;
+        config.burnerParams.currentLimit = _calculateNewCurrentLimit(limit, oldLimit, currentLimit);
+        config.burnerParams.ratePerSecond = limit / _DURATION;
+        config.burnerParams.timestamp = block.timestamp;
+    }
+
+    /**
+     * @dev Calculates the new current limit when the max limit changes.
+     * @param newLimit The new maximum limit.
+     * @param oldLimit The old maximum limit.
+     * @param currentLimit The current limit value.
+     * @return newCurrentLimit The adjusted current limit.
+     */
+    function _calculateNewCurrentLimit(
+        uint256 newLimit,
+        uint256 oldLimit,
+        uint256 currentLimit
+    ) internal pure returns (uint256 newCurrentLimit) {
+        uint256 difference;
+        if (oldLimit > newLimit) {
+            difference = oldLimit - newLimit;
+            newCurrentLimit = currentLimit > difference ? currentLimit - difference : 0;
+        } else {
+            difference = newLimit - oldLimit;
+            newCurrentLimit = currentLimit + difference;
+        }
     }
 
     /**

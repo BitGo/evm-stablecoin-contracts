@@ -7,24 +7,32 @@ describe("pause", function () {
   let contractInstance: Stablecoin;
   let defaultAdmin: SignerWithAddress;
   let freezer: SignerWithAddress;
-  let supplyController: SignerWithAddress;
+  let masterMinter: SignerWithAddress;
+  let minter: SignerWithAddress;
   let upgrader: SignerWithAddress;
-  let reserve: SignerWithAddress;
+  let reserve1: SignerWithAddress;
+  let reserve2: SignerWithAddress;
   let blacklister: SignerWithAddress;
-  let withdrawer: SignerWithAddress;
+  let rescuer: SignerWithAddress;
+  let randomAddress: SignerWithAddress;
+  const DAILY_LIMIT = ethers.parseUnits("10000000", 6); // 10M tokens daily limit
 
   before(async function () {
     [
       defaultAdmin,
       freezer,
-      supplyController,
+      masterMinter,
+      minter,
       upgrader,
       blacklister,
-      reserve,
-      withdrawer
+      rescuer,
+      reserve1,
+      reserve2,
+      randomAddress,
     ] = await ethers.getSigners();
     const ContractFactory = await ethers.getContractFactory("Stablecoin");
     const defaultAdminDelay = 7 * 24 * 60 * 60; // 7 days in seconds (or any appropriate value)
+
     const contract = await upgrades.deployProxy(
       ContractFactory,
       [
@@ -34,44 +42,44 @@ describe("pause", function () {
         defaultAdmin.address,
         defaultAdminDelay,
         freezer.address,
-        supplyController.address,
+        masterMinter.address,
         upgrader.address,
         blacklister.address,
-        withdrawer.address,
+        rescuer.address,
         1000000 * (10 ** 6)
       ],
       { kind: "uups" }
     );
-    contractInstance = (await contract.waitForDeployment()) as unknown as Stablecoin;
+    contractInstance =
+      (await contract.waitForDeployment()) as unknown as Stablecoin;
+    
+    // Configure minter with high limits for testing
+    await contractInstance.connect(masterMinter).configureMinter(minter.address, DAILY_LIMIT, DAILY_LIMIT);
   });
 
   it("Should not be able to pause as unauthorized address", async function () {
+    let failed = false;
     try {
-      await contractInstance.connect(defaultAdmin).pause();
+      await contractInstance.connect(randomAddress).pause();
     } catch (error) {
+      failed = true;
       expect(error).to.be.an("error");
     }
-
-    const paused = await contractInstance.paused();
-    expect(paused).to.be.false;
+    expect(failed).to.be.true;
   });
 
   it("Should pause the token successfully by freezer", async function () {
-    // Freezer pauses the token
-    await expect(contractInstance.connect(freezer).pause()).to.emit(
-      contractInstance,
-      "Paused"
-    );
-    const paused = await contractInstance.paused();
-    expect(paused).to.be.true;
+    await expect(contractInstance.connect(freezer).pause())
+      .to.emit(contractInstance, "Paused")
+      .withArgs(freezer.address);
   });
 
   it("Should fail to mint tokens when the token is paused", async function () {
-    const mintAmount = ethers.parseUnits("1000", 1);
+    const mintAmount = ethers.parseUnits("1000", 6);
+
     let failed = false;
     try {
-      // Attempt to mint tokens while the token is paused
-      await contractInstance.connect(supplyController).mint(reserve.address, mintAmount);
+      await contractInstance.connect(minter).mint(reserve1.address, mintAmount);
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
@@ -79,15 +87,16 @@ describe("pause", function () {
       );
       expect(error).to.be.an("error");
     }
+
     expect(failed).to.be.true;
   });
 
   it("Should fail to burn tokens when the token is paused", async function () {
-    const burnAmount = ethers.parseUnits("500", 18);
+    const burnAmount = ethers.parseUnits("500", 6);
+
     let failed = false;
     try {
-      // Attempt to burn tokens while the token is paused
-      await contractInstance.connect(supplyController).burn(reserve.address, burnAmount);
+      await contractInstance.connect(minter).burn(reserve1.address, burnAmount);
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
@@ -95,18 +104,17 @@ describe("pause", function () {
       );
       expect(error).to.be.an("error");
     }
+
     expect(failed).to.be.true;
   });
 
   it("Should fail to transfer tokens when the token is paused", async function () {
-    const transferAmount = ethers.parseUnits("100", 18);
-    // Assume accounts[0] has tokens and is trying to transfer to recipient
+    const transferAmount = ethers.parseUnits("500", 6);
     let failed = false;
     try {
-      // Attempt to transfer tokens while the token is paused
       await contractInstance
-        .connect(defaultAdmin)
-        .transfer(reserve.address, transferAmount);
+        .connect(reserve1)
+        .transfer(reserve2.address, transferAmount);
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(
@@ -114,16 +122,13 @@ describe("pause", function () {
       );
       expect(error).to.be.an("error");
     }
+
     expect(failed).to.be.true;
   });
 
   it("Should unpause the token successfully by freezer", async function () {
-    // Freezer unpauses the token
-    await expect(contractInstance.connect(freezer).unpause()).to.emit(
-      contractInstance,
-      "Unpaused"
-    );
-    const paused = await contractInstance.paused();
-    expect(paused).to.be.false;
+    await expect(contractInstance.connect(freezer).unpause())
+      .to.emit(contractInstance, "Unpaused")
+      .withArgs(freezer.address);
   });
 });
