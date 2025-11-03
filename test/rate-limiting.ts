@@ -677,4 +677,222 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       ).to.be.revertedWithCustomError(contractInstance, "SenderNotBlacklisted");
     });
   });
+
+  describe("Emergency Limit Replenishment", function () {
+    let testMinter: SignerWithAddress;
+    let testBridgeMinter: SignerWithAddress;
+
+    before(async function () {
+      [, , , , , , , , , , , , , testMinter, testBridgeMinter] = await ethers.getSigners();
+      
+      // Configure fresh minters for testing
+      await contractInstance
+        .connect(masterMinter)
+        .configureMinter(testMinter.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT);
+      
+      await contractInstance
+        .connect(masterMinter)
+        .configureBridgeMinter(testBridgeMinter.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT);
+    });
+
+    it("Should replenish native minter limits to maximum", async function () {
+      // Use some of the minter's limits
+      const mintAmount = ethers.parseUnits("400000", 6);
+      const burnAmount = ethers.parseUnits("300000", 6);
+      
+      await contractInstance.connect(testMinter).mint(user1.address, mintAmount);
+      await contractInstance.connect(testMinter).burn(user1.address, burnAmount);
+      
+      // Verify limits are reduced
+      let currentMintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      let currentBurnLimit = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(currentMintLimit).to.be.lt(DAILY_MINT_LIMIT);
+      expect(currentBurnLimit).to.be.lt(DAILY_BURN_LIMIT);
+      
+      // Replenish limits
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false)
+      )
+        .to.emit(contractInstance, "MinterLimitsReplenished")
+        .withArgs(testMinter.address, false);
+      
+      // Verify limits are now at maximum
+      currentMintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      currentBurnLimit = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(currentMintLimit).to.equal(DAILY_MINT_LIMIT);
+      expect(currentBurnLimit).to.equal(DAILY_BURN_LIMIT);
+    });
+
+    it("Should replenish bridge minter limits to maximum", async function () {
+      // Use some of the bridge minter's limits
+      const mintAmount = ethers.parseUnits("450000", 6);
+      const burnAmount = ethers.parseUnits("250000", 6);
+      
+      await contractInstance.connect(testBridgeMinter).bridgeMint(user1.address, mintAmount);
+      await contractInstance.connect(testBridgeMinter).bridgeBurn(user1.address, burnAmount);
+      
+      // Verify limits are reduced
+      let currentMintLimit = await contractInstance.mintingCurrentLimitOf(testBridgeMinter.address, true);
+      let currentBurnLimit = await contractInstance.burningCurrentLimitOf(testBridgeMinter.address, true);
+      
+      expect(currentMintLimit).to.be.lt(DAILY_MINT_LIMIT);
+      expect(currentBurnLimit).to.be.lt(DAILY_BURN_LIMIT);
+      
+      // Replenish limits
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(testBridgeMinter.address, true)
+      )
+        .to.emit(contractInstance, "MinterLimitsReplenished")
+        .withArgs(testBridgeMinter.address, true);
+      
+      // Verify limits are now at maximum
+      currentMintLimit = await contractInstance.mintingCurrentLimitOf(testBridgeMinter.address, true);
+      currentBurnLimit = await contractInstance.burningCurrentLimitOf(testBridgeMinter.address, true);
+      
+      expect(currentMintLimit).to.equal(DAILY_MINT_LIMIT);
+      expect(currentBurnLimit).to.equal(DAILY_BURN_LIMIT);
+    });
+
+    it("Should allow minting at full capacity immediately after replenishment", async function () {
+      // Use most of the limit
+      await contractInstance.connect(testMinter).mint(user1.address, PER_TX_CAP);
+      await contractInstance.connect(testMinter).mint(user1.address, PER_TX_CAP);
+      
+      const remainingLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(remainingLimit).to.be.lt(PER_TX_CAP);
+      
+      // Replenish
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      
+      // Should be able to mint at full capacity again
+      await expect(
+        contractInstance.connect(testMinter).mint(user1.address, PER_TX_CAP)
+      ).to.emit(contractInstance, "MintNative");
+      
+      const newLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(newLimit).to.equal(DAILY_MINT_LIMIT - PER_TX_CAP);
+    });
+
+    it("Should replenish both mint and burn limits simultaneously", async function () {
+      // Drain both limits significantly
+      await contractInstance.connect(testMinter).mint(user1.address, PER_TX_CAP);
+      await contractInstance.connect(testMinter).burn(user1.address, PER_TX_CAP);
+      
+      const mintLimitBefore = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      const burnLimitBefore = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(mintLimitBefore).to.be.lt(DAILY_MINT_LIMIT);
+      expect(burnLimitBefore).to.be.lt(DAILY_BURN_LIMIT);
+      
+      // Replenish
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      
+      // Check both limits are replenished
+      const mintLimitAfter = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      const burnLimitAfter = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(mintLimitAfter).to.equal(DAILY_MINT_LIMIT);
+      expect(burnLimitAfter).to.equal(DAILY_BURN_LIMIT);
+    });
+
+    it("Should work even when limits are already at maximum", async function () {
+      // Wait for natural replenishment
+      await time.increase(24 * 60 * 60);
+      
+      const mintLimitBefore = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      const burnLimitBefore = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(mintLimitBefore).to.equal(DAILY_MINT_LIMIT);
+      expect(burnLimitBefore).to.equal(DAILY_BURN_LIMIT);
+      
+      // Replenish anyway (should not fail)
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false)
+      )
+        .to.emit(contractInstance, "MinterLimitsReplenished")
+        .withArgs(testMinter.address, false);
+      
+      // Limits should still be at max
+      const mintLimitAfter = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      const burnLimitAfter = await contractInstance.burningCurrentLimitOf(testMinter.address, false);
+      
+      expect(mintLimitAfter).to.equal(DAILY_MINT_LIMIT);
+      expect(burnLimitAfter).to.equal(DAILY_BURN_LIMIT);
+    });
+
+    it("Should fail when called by non-master-minter", async function () {
+      await expect(
+        contractInstance.connect(randomAddress).replenishMinterLimits(testMinter.address, false)
+      ).to.be.reverted;
+    });
+
+    it("Should fail when replenishing non-configured native minter", async function () {
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(randomAddress.address, false)
+      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsMinter");
+    });
+
+    it("Should fail when replenishing non-configured bridge minter", async function () {
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(randomAddress.address, true)
+      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsBridgeMinter");
+    });
+
+    it("Should fail when replenishing removed minter", async function () {
+      // Create and then remove a minter
+      const tempMinter = user2;
+      await contractInstance.connect(masterMinter).configureMinter(
+        tempMinter.address,
+        DAILY_MINT_LIMIT,
+        DAILY_BURN_LIMIT
+      );
+      await contractInstance.connect(masterMinter).removeMinter(tempMinter.address);
+      
+      // Try to replenish the removed minter
+      await expect(
+        contractInstance.connect(masterMinter).replenishMinterLimits(tempMinter.address, false)
+      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsMinter");
+    });
+
+    it("Should bypass time-based replenishment", async function () {
+      // Use some limits
+      const mintAmount = ethers.parseUnits("300000", 6);
+      await contractInstance.connect(testMinter).mint(user1.address, mintAmount);
+      
+      const limitAfterMint = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(limitAfterMint).to.equal(DAILY_MINT_LIMIT - mintAmount);
+      
+      // Instead of waiting, immediately replenish
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      
+      // Should be at max immediately without time passage
+      const limitAfterReplenish = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(limitAfterReplenish).to.equal(DAILY_MINT_LIMIT);
+    });
+
+    it("Should handle multiple sequential replenishments", async function () {
+      // First replenishment
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      let mintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(mintLimit).to.equal(DAILY_MINT_LIMIT);
+      
+      // Use some limit
+      await contractInstance.connect(testMinter).mint(user1.address, ethers.parseUnits("100000", 6));
+      
+      // Second replenishment
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      mintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(mintLimit).to.equal(DAILY_MINT_LIMIT);
+      
+      // Use some limit again
+      await contractInstance.connect(testMinter).mint(user1.address, ethers.parseUnits("200000", 6));
+      
+      // Third replenishment
+      await contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false);
+      mintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
+      expect(mintLimit).to.equal(DAILY_MINT_LIMIT);
+    });
+  });
 });
