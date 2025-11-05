@@ -639,21 +639,15 @@ contract Stablecoin is
             if (amounts[i] > perTxCap) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
-        }
-        
-        // Check total against limit once
-        if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
-        
-        // Second pass: mint tokens and emit events
-        for (uint256 i = 0; i < toAddresses.length; i++) {
             _mint(toAddresses[i], amounts[i]);
-            
             if (isBridge) {
                 emit MintBridge(msg.sender, toAddresses[i], amounts[i]);
             } else {
                 emit MintNative(msg.sender, toAddresses[i], amounts[i]);
             }
         }
+        // Check total against limit once
+        if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
         
         // Update limit once at the end
         _useMinterLimits(msg.sender, totalAmount, isBridge);
