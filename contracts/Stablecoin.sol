@@ -174,6 +174,11 @@ contract Stablecoin is
      */
     event SupplyValidatorUpdated(address indexed oldValidator, address indexed newValidator);
 
+    /**
+     * @dev Emitted when a minter's limits are replenished to their maximum values in an emergency.
+     */
+    event MinterLimitsReplenished(address indexed minter, bool indexed isBridge);
+
     // --- Custom Errors ---
     /**
      * @dev The operation failed due to an invalid address.
@@ -481,6 +486,36 @@ contract Stablecoin is
      */
     function removeBridgeMinter(address bridge) external onlyRole(MASTER_MINTER_ROLE) {
         _removeMinterInternal(bridge, true);
+    }
+
+    /**
+     * @dev Replenishes a minter's limits to their maximum values in case of emergencies.
+     * This function immediately resets both the mint and burn current limits to their
+     * respective maximum limits, bypassing the normal time-based replenishment mechanism.
+     * @param minter The address of the minter whose limits should be replenished.
+     * @param isBridge Whether this is a bridge minter or a native minter.
+     */
+    function replenishMinterLimits(address minter, bool isBridge) external onlyRole(MASTER_MINTER_ROLE) {
+        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+
+        // Validate that the minter is configured
+        if (!config.isConfigured) {
+            if (isBridge) {
+                revert AccountNotConfiguredAsBridgeMinter();
+            } else {
+                revert AccountNotConfiguredAsMinter();
+            }
+        }
+
+        // Reset mint limits to maximum
+        config.minterParams.currentLimit = config.minterParams.maxLimit;
+        config.minterParams.timestamp = block.timestamp;
+
+        // Reset burn limits to maximum
+        config.burnerParams.currentLimit = config.burnerParams.maxLimit;
+        config.burnerParams.timestamp = block.timestamp;
+
+        emit MinterLimitsReplenished(minter, isBridge);
     }
 
     /**
