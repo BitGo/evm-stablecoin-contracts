@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.20;
+pragma solidity 0.8.30;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
@@ -438,16 +438,10 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter or a native minter.
      */
     function _removeMinterInternal(address account, bool isBridge) internal {
-        MinterConfig storage config = isBridge ? bridgeMinters[account] : minters[account];
+        MinterConfig storage config = _getMinterConfig(account, isBridge);
 
         // Check if the account is configured and has the role
-        if (!config.isConfigured) {
-            if (isBridge) {
-                revert AccountNotConfiguredAsBridgeMinter();
-            } else {
-                revert AccountNotConfiguredAsMinter();
-            }
-        }
+        _validateMinterConfigured(config, isBridge, false);
 
         if (!hasRole(isBridge ? BRIDGE_MINTER : MINTER, account)) {
             if (isBridge) {
@@ -496,16 +490,10 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter or a native minter.
      */
     function replenishMinterLimits(address minter, bool isBridge) external onlyRole(MASTER_MINTER_ROLE) {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
 
         // Validate that the minter is configured
-        if (!config.isConfigured) {
-            if (isBridge) {
-                revert AccountNotConfiguredAsBridgeMinter();
-            } else {
-                revert AccountNotConfiguredAsMinter();
-            }
-        }
+        _validateMinterConfigured(config, isBridge, false);
 
         // Reset mint limits to maximum
         config.minterParams.currentLimit = config.minterParams.maxLimit;
@@ -545,14 +533,8 @@ contract Stablecoin is
         if (isBlacklisted(to)) revert RecipientBlacklisted();
         if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
         
-        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
-        if (!config.isConfigured) {
-            if (isBridge) {
-                revert BridgeMinterNotConfigured();
-            } else {
-                revert MinterNotConfigured();
-            }
-        }
+        MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
+        _validateMinterConfigured(config, isBridge, true);
         
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientMinterAllowance();
@@ -566,11 +548,7 @@ contract Stablecoin is
         _useMinterLimits(msg.sender, amount, isBridge);
         _mint(to, amount);
         
-        if (isBridge) {
-            emit MintBridge(msg.sender, to, amount);
-        } else {
-            emit MintNative(msg.sender, to, amount);
-        }
+        _emitMintEvent(msg.sender, to, amount, isBridge);
     }
     
     /**
@@ -582,14 +560,8 @@ contract Stablecoin is
     function _burnTokens(address from, uint256 amount, bool isBridge) internal {
         if (isBlacklisted(from)) revert SenderBlacklisted();
         
-        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
-        if (!config.isConfigured) {
-            if (isBridge) {
-                revert BridgeMinterNotConfigured();
-            } else {
-                revert MinterNotConfigured();
-            }
-        }
+        MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
+        _validateMinterConfigured(config, isBridge, true);
         
         uint256 currentLimit = _getBurningCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientBurnerAllowance();
@@ -603,11 +575,7 @@ contract Stablecoin is
         _useBurnerLimits(msg.sender, amount, isBridge);
         _burn(from, amount);
         
-        if (isBridge) {
-            emit BurnBridge(msg.sender, from, amount);
-        } else {
-            emit BurnNative(msg.sender, from, amount);
-        }
+        _emitBurnEvent(msg.sender, from, amount, isBridge);
     }
     
     /**
@@ -620,14 +588,8 @@ contract Stablecoin is
     function _mintTokensBatch(address[] memory toAddresses, uint256[] memory amounts, bool isBridge) internal {
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         
-        MinterConfig storage config = isBridge ? bridgeMinters[msg.sender] : minters[msg.sender];
-        if (!config.isConfigured) {
-            if (isBridge) {
-                revert BridgeMinterNotConfigured();
-            } else {
-                revert MinterNotConfigured();
-            }
-        }
+        MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
+        _validateMinterConfigured(config, isBridge, true);
         
         // Calculate current limit once for gas optimization
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
@@ -640,11 +602,7 @@ contract Stablecoin is
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
             _mint(toAddresses[i], amounts[i]);
-            if (isBridge) {
-                emit MintBridge(msg.sender, toAddresses[i], amounts[i]);
-            } else {
-                emit MintNative(msg.sender, toAddresses[i], amounts[i]);
-            }
+            _emitMintEvent(msg.sender, toAddresses[i], amounts[i], isBridge);
         }
         // Check total against limit once
         if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
@@ -881,9 +839,7 @@ contract Stablecoin is
         address to,
         uint256 value
     ) public virtual override returns (bool) {
-        if (isBlacklisted(_msgSender())) revert SpenderBlacklisted();
-        if (isBlacklisted(from)) revert SenderBlacklisted();
-        if (isBlacklisted(to)) revert RecipientBlacklisted();
+        _validateBlacklistForTransfer(_msgSender(), from, to);
         return super.transferFrom(from, to, value);
     }
 
@@ -897,8 +853,7 @@ contract Stablecoin is
         address to,
         uint256 value
     ) public virtual override returns (bool) {
-        if (isBlacklisted(_msgSender())) revert SenderBlacklisted();
-        if (isBlacklisted(to)) revert RecipientBlacklisted();
+        _validateBlacklistForTransfer(_msgSender(), _msgSender(), to);
         return super.transfer(to, value);
     }
 
@@ -943,6 +898,117 @@ contract Stablecoin is
     // --- Internal Functions ---
 
     /**
+     * @dev Retrieves the minter configuration based on whether it's a bridge or native minter.
+     * @param account The address of the minter.
+     * @param isBridge Whether this is a bridge minter or native minter.
+     * @return The minter configuration storage reference.
+     */
+    function _getMinterConfig(address account, bool isBridge) internal view returns (MinterConfig storage) {
+        return isBridge ? bridgeMinters[account] : minters[account];
+    }
+
+    /**
+     * @dev Validates that a minter is configured, reverting with appropriate error if not.
+     * @param config The minter configuration to validate.
+     * @param isBridge Whether this is a bridge minter or native minter.
+     * @param forMinting Whether this validation is for minting (true) or general configuration (false).
+     */
+    function _validateMinterConfigured(MinterConfig storage config, bool isBridge, bool forMinting) internal view {
+        if (!config.isConfigured) {
+            if (forMinting) {
+                if (isBridge) {
+                    revert BridgeMinterNotConfigured();
+                } else {
+                    revert MinterNotConfigured();
+                }
+            } else {
+                if (isBridge) {
+                    revert AccountNotConfiguredAsBridgeMinter();
+                } else {
+                    revert AccountNotConfiguredAsMinter();
+                }
+            }
+        }
+    }
+
+    /**
+     * @dev Emits the appropriate mint event based on whether it's a bridge or native operation.
+     * @param minter The address of the minter.
+     * @param to The address receiving the minted tokens.
+     * @param amount The amount of tokens minted.
+     * @param isBridge Whether this is a bridge mint or native mint.
+     */
+    function _emitMintEvent(address minter, address to, uint256 amount, bool isBridge) internal {
+        if (isBridge) {
+            emit MintBridge(minter, to, amount);
+        } else {
+            emit MintNative(minter, to, amount);
+        }
+    }
+
+    /**
+     * @dev Emits the appropriate burn event based on whether it's a bridge or native operation.
+     * @param burner The address of the burner.
+     * @param from The address from which tokens are burned.
+     * @param amount The amount of tokens burned.
+     * @param isBridge Whether this is a bridge burn or native burn.
+     */
+    function _emitBurnEvent(address burner, address from, uint256 amount, bool isBridge) internal {
+        if (isBridge) {
+            emit BurnBridge(burner, from, amount);
+        } else {
+            emit BurnNative(burner, from, amount);
+        }
+    }
+
+    /**
+     * @dev Validates that none of the addresses involved in a transfer are blacklisted.
+     * @param spender The address spending the tokens (relevant for transferFrom).
+     * @param from The address sending the tokens.
+     * @param to The address receiving the tokens.
+     */
+    function _validateBlacklistForTransfer(address spender, address from, address to) internal view {
+        if (isBlacklisted(spender)) revert SpenderBlacklisted();
+        if (isBlacklisted(from)) revert SenderBlacklisted();
+        if (isBlacklisted(to)) revert RecipientBlacklisted();
+    }
+
+    /**
+     * @dev Uses the minter/burner limit by reducing the current limit.
+     * @param params The minter parameters to update.
+     * @param amount The amount to reduce from the limit.
+     */
+    function _useLimits(MinterParams storage params, uint256 amount) internal {
+        uint256 currentLimit = _getCurrentLimit(
+            params.currentLimit,
+            params.maxLimit,
+            params.timestamp,
+            params.ratePerSecond
+        );
+        params.timestamp = block.timestamp;
+        params.currentLimit = currentLimit - amount;
+    }
+
+    /**
+     * @dev Updates the limit for minter/burner parameters.
+     * @param params The minter parameters to update.
+     * @param newLimit The new limit value.
+     */
+    function _changeLimit(MinterParams storage params, uint256 newLimit) internal {
+        uint256 oldLimit = params.maxLimit;
+        uint256 currentLimit = _getCurrentLimit(
+            params.currentLimit,
+            params.maxLimit,
+            params.timestamp,
+            params.ratePerSecond
+        );
+        params.maxLimit = newLimit;
+        params.currentLimit = _calculateNewCurrentLimit(newLimit, oldLimit, currentLimit);
+        params.ratePerSecond = newLimit / _DURATION;
+        params.timestamp = block.timestamp;
+    }
+
+    /**
      * @dev Authorizes the upgrade to a new implementation contract.
      * @param newImplementation The address of the new implementation contract.
      */
@@ -974,7 +1040,7 @@ contract Stablecoin is
      * @return The current minting limit.
      */
     function _getMintingCurrentLimit(address minter, bool isBridge) internal view returns (uint256) {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
         return _getCurrentLimit(
             config.minterParams.currentLimit,
             config.minterParams.maxLimit,
@@ -990,7 +1056,7 @@ contract Stablecoin is
      * @return The current burning limit.
      */
     function _getBurningCurrentLimit(address minter, bool isBridge) internal view returns (uint256) {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
         return _getCurrentLimit(
             config.burnerParams.currentLimit,
             config.burnerParams.maxLimit,
@@ -1032,15 +1098,8 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter.
      */
     function _useMinterLimits(address minter, uint256 amount, bool isBridge) internal {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
-        uint256 currentLimit = _getCurrentLimit(
-            config.minterParams.currentLimit,
-            config.minterParams.maxLimit,
-            config.minterParams.timestamp,
-            config.minterParams.ratePerSecond
-        );
-        config.minterParams.timestamp = block.timestamp;
-        config.minterParams.currentLimit = currentLimit - amount;
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
+        _useLimits(config.minterParams, amount);
     }
 
     /**
@@ -1050,15 +1109,8 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter.
      */
     function _useBurnerLimits(address minter, uint256 amount, bool isBridge) internal {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
-        uint256 currentLimit = _getCurrentLimit(
-            config.burnerParams.currentLimit,
-            config.burnerParams.maxLimit,
-            config.burnerParams.timestamp,
-            config.burnerParams.ratePerSecond
-        );
-        config.burnerParams.timestamp = block.timestamp;
-        config.burnerParams.currentLimit = currentLimit - amount;
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
+        _useLimits(config.burnerParams, amount);
     }
 
     /**
@@ -1068,18 +1120,8 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter.
      */
     function _changeMinterLimit(address minter, uint256 limit, bool isBridge) internal {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
-        uint256 oldLimit = config.minterParams.maxLimit;
-        uint256 currentLimit = _getCurrentLimit(
-            config.minterParams.currentLimit,
-            config.minterParams.maxLimit,
-            config.minterParams.timestamp,
-            config.minterParams.ratePerSecond
-        );
-        config.minterParams.maxLimit = limit;
-        config.minterParams.currentLimit = _calculateNewCurrentLimit(limit, oldLimit, currentLimit);
-        config.minterParams.ratePerSecond = limit / _DURATION;
-        config.minterParams.timestamp = block.timestamp;
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
+        _changeLimit(config.minterParams, limit);
     }
 
     /**
@@ -1089,18 +1131,8 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge minter.
      */
     function _changeBurnerLimit(address minter, uint256 limit, bool isBridge) internal {
-        MinterConfig storage config = isBridge ? bridgeMinters[minter] : minters[minter];
-        uint256 oldLimit = config.burnerParams.maxLimit;
-        uint256 currentLimit = _getCurrentLimit(
-            config.burnerParams.currentLimit,
-            config.burnerParams.maxLimit,
-            config.burnerParams.timestamp,
-            config.burnerParams.ratePerSecond
-        );
-        config.burnerParams.maxLimit = limit;
-        config.burnerParams.currentLimit = _calculateNewCurrentLimit(limit, oldLimit, currentLimit);
-        config.burnerParams.ratePerSecond = limit / _DURATION;
-        config.burnerParams.timestamp = block.timestamp;
+        MinterConfig storage config = _getMinterConfig(minter, isBridge);
+        _changeLimit(config.burnerParams, limit);
     }
 
     /**
