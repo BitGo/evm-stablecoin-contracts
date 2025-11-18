@@ -831,13 +831,13 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
     it("Should fail when replenishing non-configured native minter", async function () {
       await expect(
         contractInstance.connect(masterMinter).replenishMinterLimits(randomAddress.address, false)
-      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsMinter");
+      ).to.be.revertedWithCustomError(contractInstance, "MinterNotConfigured");
     });
 
     it("Should fail when replenishing non-configured bridge minter", async function () {
       await expect(
         contractInstance.connect(masterMinter).replenishMinterLimits(randomAddress.address, true)
-      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsBridgeMinter");
+      ).to.be.revertedWithCustomError(contractInstance, "BridgeMinterNotConfigured");
     });
 
     it("Should fail when replenishing removed minter", async function () {
@@ -853,7 +853,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       // Try to replenish the removed minter
       await expect(
         contractInstance.connect(masterMinter).replenishMinterLimits(tempMinter.address, false)
-      ).to.be.revertedWithCustomError(contractInstance, "AccountNotConfiguredAsMinter");
+      ).to.be.revertedWithCustomError(contractInstance, "MinterNotConfigured");
     });
 
     it("Should bypass time-based replenishment", async function () {

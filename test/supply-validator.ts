@@ -431,4 +431,278 @@ describe("Supply Validator", function () {
       expect(await mockValidator.burnCallCount()).to.equal(1);
     });
   });
+
+  describe("Validator Integration - Native Batch Minting", function () {
+    let recipient1: SignerWithAddress;
+    let recipient2: SignerWithAddress;
+    let recipient3: SignerWithAddress;
+
+    beforeEach(async function () {
+      const signers = await ethers.getSigners();
+      // Use signers that haven't been used yet (indices 11, 12, 13)
+      recipient1 = signers[11];
+      recipient2 = signers[12];
+      recipient3 = signers[13];
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(mockValidator.getAddress());
+    });
+
+    it("Should call validateMintBatch on native batch mint operations", async function () {
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address, recipient3.address];
+      
+      await contractInstance.connect(minter).mintBatch(addresses, amounts);
+      
+      // validateMintBatch should increment mintCallCount for each account in the batch
+      expect(await mockValidator.mintCallCount()).to.equal(3);
+      // Last mint should reflect the last account in the batch
+      expect(await mockValidator.lastMintAccount()).to.equal(recipient3.address);
+      expect(await mockValidator.lastMintAmount()).to.equal(amounts[2]);
+      expect(await mockValidator.lastMintMinter()).to.equal(minter.address);
+      expect(await mockValidator.lastMintIsBridge()).to.equal(false);
+    });
+
+    it("Should pass correct parameters to validateMintBatch for native batch mint", async function () {
+      const amounts = [
+        ethers.parseUnits("5000", 6),
+        ethers.parseUnits("10000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      await contractInstance.connect(minter).mintBatch(addresses, amounts);
+      
+      expect(await mockValidator.mintCallCount()).to.equal(2);
+      expect(await mockValidator.lastMintAccount()).to.equal(recipient2.address);
+      expect(await mockValidator.lastMintAmount()).to.equal(amounts[1]);
+      expect(await mockValidator.lastMintMinter()).to.equal(minter.address);
+      expect(await mockValidator.lastMintIsBridge()).to.equal(false);
+    });
+
+    it("Should revert batch mint if validator rejects", async function () {
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Configure validator to reject mints
+      await mockValidator.setRejectMint(true);
+      
+      await expect(
+        contractInstance.connect(minter).mintBatch(addresses, amounts)
+      ).to.be.revertedWith("MockValidator: Mint rejected");
+      
+      // No tokens should be minted
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(0);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(0);
+    });
+
+    it("Should allow batch mint when validator accepts", async function () {
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address, recipient3.address];
+      
+      // Validator accepts by default
+      await expect(
+        contractInstance.connect(minter).mintBatch(addresses, amounts)
+      )
+        .to.emit(contractInstance, "MintNative")
+        .withArgs(minter.address, recipient1.address, amounts[0])
+        .to.emit(contractInstance, "MintNative")
+        .withArgs(minter.address, recipient2.address, amounts[1])
+        .to.emit(contractInstance, "MintNative")
+        .withArgs(minter.address, recipient3.address, amounts[2]);
+        
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1]);
+      expect(await contractInstance.balanceOf(recipient3.address)).to.equal(amounts[2]);
+    });
+
+    it("Should call validateMintBatch before minting tokens", async function () {
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Reset validator to track calls
+      await mockValidator.reset();
+      
+      // Perform batch mint
+      await contractInstance.connect(minter).mintBatch(addresses, amounts);
+      
+      // Validator should have been called (validateMintBatch increments count for each account)
+      expect(await mockValidator.mintCallCount()).to.equal(2);
+      
+      // Tokens should be minted
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1]);
+    });
+
+    it("Should NOT call validateMintBatch when validator is not set", async function () {
+      // Explicitly unset the validator (set to zero address)
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(addressZero);
+      await mockValidator.reset(); // Reset counters
+      
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Validator is not set (default is zero address)
+      await contractInstance.connect(minter).mintBatch(addresses, amounts);
+      
+      expect(await mockValidator.mintCallCount()).to.equal(0);
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1]);
+    });
+
+    it("Should stop calling validateMintBatch after disabling validator", async function () {
+      const amounts = [
+        ethers.parseUnits("1000", 6),
+        ethers.parseUnits("2000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Set validator
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(mockValidator.getAddress());
+      
+      // Batch mint with validator
+      await contractInstance.connect(minter).mintBatch(addresses, amounts);
+      expect(await mockValidator.mintCallCount()).to.equal(2);
+      
+      // Disable validator
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(addressZero);
+      await mockValidator.reset();
+      
+      // Batch mint without validator
+      const newAmounts = [
+        ethers.parseUnits("500", 6),
+        ethers.parseUnits("1500", 6),
+      ];
+      await contractInstance.connect(minter).mintBatch(addresses, newAmounts);
+      expect(await mockValidator.mintCallCount()).to.equal(0);
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0] + newAmounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1] + newAmounts[1]);
+    });
+  });
+
+  describe("Validator Integration - Bridge Batch Minting", function () {
+    let recipient1: SignerWithAddress;
+    let recipient2: SignerWithAddress;
+    let recipient3: SignerWithAddress;
+
+    beforeEach(async function () {
+      const signers = await ethers.getSigners();
+      // Use signers that haven't been used yet (indices 11, 12, 13)
+      recipient1 = signers[11];
+      recipient2 = signers[12];
+      recipient3 = signers[13];
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(mockValidator.getAddress());
+    });
+
+    it("Should call validateMintBatch on bridge batch mint operations", async function () {
+      const amounts = [
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+        ethers.parseUnits("4000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address, recipient3.address];
+      
+      await contractInstance.connect(bridgeMinter).bridgeMintBatch(addresses, amounts);
+      
+      // validateMintBatch should increment mintCallCount for each account in the batch
+      expect(await mockValidator.mintCallCount()).to.equal(3);
+      // Last mint should reflect the last account in the batch
+      expect(await mockValidator.lastMintAccount()).to.equal(recipient3.address);
+      expect(await mockValidator.lastMintAmount()).to.equal(amounts[2]);
+      expect(await mockValidator.lastMintMinter()).to.equal(bridgeMinter.address);
+      expect(await mockValidator.lastMintIsBridge()).to.equal(true);
+    });
+
+    it("Should pass correct parameters to validateMintBatch for bridge batch mint", async function () {
+      const amounts = [
+        ethers.parseUnits("5000", 6),
+        ethers.parseUnits("10000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      await contractInstance.connect(bridgeMinter).bridgeMintBatch(addresses, amounts);
+      
+      expect(await mockValidator.mintCallCount()).to.equal(2);
+      expect(await mockValidator.lastMintAccount()).to.equal(recipient2.address);
+      expect(await mockValidator.lastMintAmount()).to.equal(amounts[1]);
+      expect(await mockValidator.lastMintMinter()).to.equal(bridgeMinter.address);
+      expect(await mockValidator.lastMintIsBridge()).to.equal(true);
+    });
+
+    it("Should revert bridge batch mint if validator rejects", async function () {
+      const amounts = [
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Configure validator to reject mints
+      await mockValidator.setRejectMint(true);
+      
+      await expect(
+        contractInstance.connect(bridgeMinter).bridgeMintBatch(addresses, amounts)
+      ).to.be.revertedWith("MockValidator: Mint rejected");
+      
+      // No tokens should be minted
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(0);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(0);
+    });
+
+    it("Should allow bridge batch mint when validator accepts", async function () {
+      const amounts = [
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+        ethers.parseUnits("4000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address, recipient3.address];
+      
+      // Validator accepts by default
+      await expect(
+        contractInstance.connect(bridgeMinter).bridgeMintBatch(addresses, amounts)
+      )
+        .to.emit(contractInstance, "MintBridge")
+        .withArgs(bridgeMinter.address, recipient1.address, amounts[0])
+        .to.emit(contractInstance, "MintBridge")
+        .withArgs(bridgeMinter.address, recipient2.address, amounts[1])
+        .to.emit(contractInstance, "MintBridge")
+        .withArgs(bridgeMinter.address, recipient3.address, amounts[2]);
+        
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1]);
+      expect(await contractInstance.balanceOf(recipient3.address)).to.equal(amounts[2]);
+    });
+
+    it("Should NOT call validateMintBatch when validator is not set (bridge)", async function () {
+      // Explicitly unset the validator (set to zero address)
+      await contractInstance.connect(defaultAdmin).setSupplyValidator(addressZero);
+      await mockValidator.reset(); // Reset counters
+      
+      const amounts = [
+        ethers.parseUnits("2000", 6),
+        ethers.parseUnits("3000", 6),
+      ];
+      const addresses = [recipient1.address, recipient2.address];
+      
+      // Validator is not set (default is zero address)
+      await contractInstance.connect(bridgeMinter).bridgeMintBatch(addresses, amounts);
+      
+      expect(await mockValidator.mintCallCount()).to.equal(0);
+      expect(await contractInstance.balanceOf(recipient1.address)).to.equal(amounts[0]);
+      expect(await contractInstance.balanceOf(recipient2.address)).to.equal(amounts[1]);
+    });
+  });
 });

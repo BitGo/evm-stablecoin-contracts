@@ -95,22 +95,6 @@ contract Stablecoin is
         bool isConfigured;
     }
 
-    // --- Storage Mappings ---
-    /**
-     * @dev Maps native minter addresses to their configurations
-     */
-    mapping(address => MinterConfig) public minters;
-
-    /**
-     * @dev Maps bridge minter addresses to their configurations
-     */
-    mapping(address => MinterConfig) public bridgeMinters;
-
-    /**
-     * @dev Address of the supply validator contract
-     */
-    address internal _supplyValidator;
-
     // --- Events ---
     /**
      * @dev Emitted when tokens are minted natively (backed by collateral, treasury operations).
@@ -221,6 +205,11 @@ contract Stablecoin is
     error ArrayLengthsMismatch();
 
     /**
+     * @dev The operation failed because the array lengths are empty.
+     */
+    error EmptyArrayLengths();
+
+    /**
      * @dev The operation failed because the minter is not configured.
      */
     error MinterNotConfigured();
@@ -260,25 +249,6 @@ contract Stablecoin is
      */
     error AccountAlreadyBridgeMinter();
 
-    /**
-     * @dev The operation failed because the account is not configured as a minter.
-     */
-    error AccountNotConfiguredAsMinter();
-
-    /**
-     * @dev The operation failed because the account is not configured as a bridge minter.
-     */
-    error AccountNotConfiguredAsBridgeMinter();
-
-    /**
-     * @dev The operation failed because the account does not have the minter role.
-     */
-    error AccountMissingMinterRole();
-
-    /**
-     * @dev The operation failed because the account does not have the bridge minter role.
-     */
-    error AccountMissingBridgeMinterRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -291,10 +261,16 @@ contract Stablecoin is
      * It includes the following properties:
      * - `mintCapPerTransaction`: The maximum allowable mint amount per transaction.
      * - `tokenDecimals`: The number of decimals for the token.
+     * - `minters`: Maps native minter addresses to their configurations.
+     * - `bridgeMinters`: Maps bridge minter addresses to their configurations.
+     * - `supplyValidator`: Address of the supply validator contract.
      */
     struct StablecoinStorage {
         uint256 mintCapPerTransaction;
         uint8 tokenDecimals;
+        mapping(address => MinterConfig) minters;
+        mapping(address => MinterConfig) bridgeMinters;
+        address supplyValidator;
     }
 
     /**
@@ -372,20 +348,21 @@ contract Stablecoin is
             revert AccountAlreadyBridgeMinter();
         }
 
+        StablecoinStorage storage $ = _getStablecoinStorage();
         bool isUpdate = false;
         
         if (isBridge) {
-            if (bridgeMinters[account].isConfigured) {
+            if ($.bridgeMinters[account].isConfigured) {
                 isUpdate = true;
             } else {
-                bridgeMinters[account].isConfigured = true;
+                $.bridgeMinters[account].isConfigured = true;
                 _grantRole(BRIDGE_MINTER, account);
             }
         } else {
-            if (minters[account].isConfigured) {
+            if ($.minters[account].isConfigured) {
                 isUpdate = true;
             } else {
-                minters[account].isConfigured = true;
+                $.minters[account].isConfigured = true;
                 _grantRole(MINTER, account);
             }
         }
@@ -441,13 +418,13 @@ contract Stablecoin is
         MinterConfig storage config = _getMinterConfig(account, isBridge);
 
         // Check if the account is configured and has the role
-        _validateMinterConfigured(config, isBridge, false);
+        _validateMinterConfigured(config, isBridge);
 
         if (!hasRole(isBridge ? BRIDGE_MINTER : MINTER, account)) {
             if (isBridge) {
-                revert AccountMissingBridgeMinterRole();
+                revert BridgeMinterNotConfigured();
             } else {
-                revert AccountMissingMinterRole();
+                revert MinterNotConfigured();
             }
         }
 
@@ -493,7 +470,7 @@ contract Stablecoin is
         MinterConfig storage config = _getMinterConfig(minter, isBridge);
 
         // Validate that the minter is configured
-        _validateMinterConfigured(config, isBridge, false);
+        _validateMinterConfigured(config, isBridge);
 
         // Reset mint limits to maximum
         config.minterParams.currentLimit = config.minterParams.maxLimit;
@@ -530,17 +507,19 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge mint operation.
      */
     function _mintTokens(address to, uint256 amount, bool isBridge) internal {
+        StablecoinStorage storage $ = _getStablecoinStorage();
+        
         if (isBlacklisted(to)) revert RecipientBlacklisted();
-        if (amount > _getStablecoinStorage().mintCapPerTransaction) revert ExceedsMintTransactionCap();
+        if (amount > $.mintCapPerTransaction) revert ExceedsMintTransactionCap();
         
         MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
-        _validateMinterConfigured(config, isBridge, true);
+        _validateMinterConfigured(config, isBridge);
         
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientMinterAllowance();
         
         // Run supply validator if it is set
-        address validator = _supplyValidator;
+        address validator = $.supplyValidator;
         if (validator != address(0)) {
             ISupplyValidator(validator).validateMint(to, amount, msg.sender, isBridge);
         }
@@ -561,13 +540,13 @@ contract Stablecoin is
         if (isBlacklisted(from)) revert SenderBlacklisted();
         
         MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
-        _validateMinterConfigured(config, isBridge, true);
+        _validateMinterConfigured(config, isBridge);
         
         uint256 currentLimit = _getBurningCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientBurnerAllowance();
         
         // Run supply validator if it is set
-        address validator = _supplyValidator;
+        address validator = _getStablecoinStorage().supplyValidator;
         if (validator != address(0)) {
             ISupplyValidator(validator).validateBurn(from, amount, msg.sender, isBridge);
         }
@@ -586,29 +565,35 @@ contract Stablecoin is
      * @param isBridge Whether this is a bridge mint operation.
      */
     function _mintTokensBatch(address[] memory toAddresses, uint256[] memory amounts, bool isBridge) internal {
+        if (toAddresses.length == 0 || amounts.length == 0) revert EmptyArrayLengths();
         if (toAddresses.length != amounts.length) revert ArrayLengthsMismatch();
         
+        StablecoinStorage storage $ = _getStablecoinStorage();
         MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
-        _validateMinterConfigured(config, isBridge, true);
+        _validateMinterConfigured(config, isBridge);
         
-        // Calculate current limit once for gas optimization
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
         uint256 totalAmount = 0;
-        uint256 perTxCap = _getStablecoinStorage().mintCapPerTransaction;
-        
-        // First pass: validate all inputs and calculate total
+        uint256 perTxCap = $.mintCapPerTransaction;
         for (uint256 i = 0; i < toAddresses.length; i++) {
             if (amounts[i] > perTxCap) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
+        }
+
+        if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
+        
+        address validator = $.supplyValidator;
+        if (validator != address(0)) {
+            ISupplyValidator(validator).validateMintBatch(toAddresses, amounts, msg.sender, isBridge);
+        }        
+        
+        _useMinterLimits(msg.sender, totalAmount, isBridge);
+
+        for (uint256 i = 0; i < toAddresses.length; i++) {
             _mint(toAddresses[i], amounts[i]);
             _emitMintEvent(msg.sender, toAddresses[i], amounts[i], isBridge);
         }
-        // Check total against limit once
-        if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
-        
-        // Update limit once at the end
-        _useMinterLimits(msg.sender, totalAmount, isBridge);
     }
     
     // --- Minter Functions (Native) ---
@@ -678,10 +663,11 @@ contract Stablecoin is
      * @return The maximum minting limit.
      */
     function mintingMaxLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        StablecoinStorage storage $ = _getStablecoinStorage();
         if (isBridge) {
-            return bridgeMinters[minter].minterParams.maxLimit;
+            return $.bridgeMinters[minter].minterParams.maxLimit;
         } else {
-            return minters[minter].minterParams.maxLimit;
+            return $.minters[minter].minterParams.maxLimit;
         }
     }
 
@@ -692,10 +678,11 @@ contract Stablecoin is
      * @return The maximum burning limit.
      */
     function burningMaxLimitOf(address minter, bool isBridge) public view returns (uint256) {
+        StablecoinStorage storage $ = _getStablecoinStorage();
         if (isBridge) {
-            return bridgeMinters[minter].burnerParams.maxLimit;
+            return $.bridgeMinters[minter].burnerParams.maxLimit;
         } else {
-            return minters[minter].burnerParams.maxLimit;
+            return $.minters[minter].burnerParams.maxLimit;
         }
     }
 
@@ -725,7 +712,7 @@ contract Stablecoin is
      * @return True if the address is a configured minter.
      */
     function isMinter(address account) external view returns (bool) {
-        return minters[account].isConfigured;
+        return _getStablecoinStorage().minters[account].isConfigured;
     }
 
     /**
@@ -734,7 +721,7 @@ contract Stablecoin is
      * @return True if the address is a configured bridge minter.
      */
     function isBridgeMinter(address account) external view returns (bool) {
-        return bridgeMinters[account].isConfigured;
+        return _getStablecoinStorage().bridgeMinters[account].isConfigured;
     }
 
     /**
@@ -755,6 +742,24 @@ contract Stablecoin is
         return _getMintingCurrentLimit(bridge, true);
     }
 
+    /**
+     * @dev Returns the minter configuration for a native minter.
+     * @param minter The address of the minter.
+     * @return The minter configuration.
+     */
+    function minters(address minter) external view returns (MinterConfig memory) {
+        return _getStablecoinStorage().minters[minter];
+    }
+
+    /**
+     * @dev Returns the minter configuration for a bridge minter.
+     * @param bridge The address of the bridge.
+     * @return The bridge minter configuration.
+     */
+    function bridgeMinters(address bridge) external view returns (MinterConfig memory) {
+        return _getStablecoinStorage().bridgeMinters[bridge];
+    }
+
     // --- Admin Functions ---
 
     /**
@@ -766,7 +771,7 @@ contract Stablecoin is
     function setMintCapPerTransaction(
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newLimit <= 0) revert InvalidAmount();
+        if (newLimit == 0) revert InvalidAmount();
         _getStablecoinStorage().mintCapPerTransaction = newLimit;
         emit MintCapPerTransactionSet(newLimit);
     }
@@ -783,7 +788,7 @@ contract Stablecoin is
         uint256 amount
     ) external onlyRole(RESCUER_ROLE) {
         if (recipient == address(0)) revert InvalidAddress();
-        if (amount <= 0) revert InvalidAmount();
+        if (amount == 0) revert InvalidAmount();
         if (isBlacklisted(recipient)) revert RecipientBlacklisted();
         token.safeTransfer(recipient, amount);
         emit TokensRescued(address(token), recipient, amount);
@@ -796,8 +801,9 @@ contract Stablecoin is
      * @param newValidator The address of the new supply validator contract.
      */
     function setSupplyValidator(address newValidator) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        address oldValidator = _supplyValidator;
-        _supplyValidator = newValidator;
+        StablecoinStorage storage $ = _getStablecoinStorage();
+        address oldValidator = $.supplyValidator;
+        $.supplyValidator = newValidator;
         emit SupplyValidatorUpdated(oldValidator, newValidator);
     }
 
@@ -806,7 +812,7 @@ contract Stablecoin is
      * @return The address of the supply validator contract.
      */
     function getSupplyValidator() external view returns (address) {
-        return _supplyValidator;
+        return _getStablecoinStorage().supplyValidator;
     }
 
     /**
@@ -904,30 +910,23 @@ contract Stablecoin is
      * @return The minter configuration storage reference.
      */
     function _getMinterConfig(address account, bool isBridge) internal view returns (MinterConfig storage) {
-        return isBridge ? bridgeMinters[account] : minters[account];
+        StablecoinStorage storage $ = _getStablecoinStorage();
+        return isBridge ? $.bridgeMinters[account] : $.minters[account];
     }
 
     /**
      * @dev Validates that a minter is configured, reverting with appropriate error if not.
      * @param config The minter configuration to validate.
      * @param isBridge Whether this is a bridge minter or native minter.
-     * @param forMinting Whether this validation is for minting (true) or general configuration (false).
      */
-    function _validateMinterConfigured(MinterConfig storage config, bool isBridge, bool forMinting) internal view {
+    function _validateMinterConfigured(MinterConfig storage config, bool isBridge) internal view {
         if (!config.isConfigured) {
-            if (forMinting) {
                 if (isBridge) {
                     revert BridgeMinterNotConfigured();
                 } else {
                     revert MinterNotConfigured();
                 }
-            } else {
-                if (isBridge) {
-                    revert AccountNotConfiguredAsBridgeMinter();
-                } else {
-                    revert AccountNotConfiguredAsMinter();
-                }
-            }
+
         }
     }
 
@@ -1084,7 +1083,7 @@ contract Stablecoin is
             return limit;
         } else if (timestamp + _DURATION <= block.timestamp) {
             limit = maxLimit;
-        } else if (timestamp + _DURATION > block.timestamp) {
+        } else {
             uint256 timePassed = block.timestamp - timestamp;
             uint256 calculatedLimit = limit + (timePassed * ratePerSecond);
             limit = calculatedLimit > maxLimit ? maxLimit : calculatedLimit;

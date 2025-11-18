@@ -71,6 +71,28 @@ contract MockSupplyValidator is ISupplyValidator {
             revert(MINT_REJECTED);
         }
     }
+
+    function validateMintBatch(
+        address[] memory accounts,
+        uint256[] memory amounts,
+        address minter,
+        bool isBridge
+    ) external override {
+        // Mock function to validate a batch of mint operations
+        for (uint256 i = 0; i < accounts.length; i++) {
+            address account = accounts[i];
+            uint256 amount = amounts[i];
+            lastMintAccount = account;
+            lastMintAmount = amount;
+            lastMintMinter = minter;
+            lastMintIsBridge = isBridge;
+            mintCallCount++;   
+        }
+        // Revert if configured to reject
+        if (shouldRejectMint) {
+            revert(MINT_REJECTED);
+        }
+    }
     
     /**
      * @dev Validates a burn operation
