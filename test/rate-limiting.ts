@@ -249,6 +249,9 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       const burnAmount = ethers.parseUnits("50000", 6);
       const balanceBefore = await contractInstance.balanceOf(user1.address);
 
+      // User1 must approve minter1 to burn their tokens
+      await contractInstance.connect(user1).approve(minter1.address, burnAmount);
+
       await expect(
         contractInstance.connect(minter1).burn(user1.address, burnAmount)
       )
@@ -269,12 +272,17 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       const amountToBurn = currentBurnLimit - ethers.parseUnits("1000", 6);
       
       if (amountToBurn > 0n && amountToBurn <= user1Balance) {
+        // User1 approves minter1 to burn tokens
+        await contractInstance.connect(user1).approve(minter1.address, amountToBurn);
         await contractInstance.connect(minter1).burn(user1.address, amountToBurn);
       }
       
       // Now try to burn more than what's left in the daily limit
       const remainingLimit = await contractInstance.burningCurrentLimitOf(minter1.address, false);
       const exceedingAmount = remainingLimit + ethers.parseUnits("1000", 6);
+
+      // User1 approves the exceeding amount
+      await contractInstance.connect(user1).approve(minter1.address, exceedingAmount);
 
       await expect(
         contractInstance.connect(minter1).burn(user1.address, exceedingAmount)
@@ -367,6 +375,9 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
     it("Should burn tokens via bridge within limits", async function () {
       const burnAmount = ethers.parseUnits("50000", 6);
       const balanceBefore = await contractInstance.balanceOf(user1.address);
+
+      // User1 must approve bridgeMinter1 to burn their tokens
+      await contractInstance.connect(user1).approve(bridgeMinter1.address, burnAmount);
 
       await expect(
         contractInstance.connect(bridgeMinter1).bridgeBurn(user1.address, burnAmount)
@@ -701,6 +712,9 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       const burnAmount = ethers.parseUnits("300000", 6);
       
       await contractInstance.connect(testMinter).mint(user1.address, mintAmount);
+      
+      // User1 must approve testMinter to burn their tokens
+      await contractInstance.connect(user1).approve(testMinter.address, burnAmount);
       await contractInstance.connect(testMinter).burn(user1.address, burnAmount);
       
       // Verify limits are reduced
@@ -731,6 +745,9 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
       const burnAmount = ethers.parseUnits("250000", 6);
       
       await contractInstance.connect(testBridgeMinter).bridgeMint(user1.address, mintAmount);
+      
+      // User1 must approve testBridgeMinter to burn their tokens
+      await contractInstance.connect(user1).approve(testBridgeMinter.address, burnAmount);
       await contractInstance.connect(testBridgeMinter).bridgeBurn(user1.address, burnAmount);
       
       // Verify limits are reduced
@@ -778,6 +795,9 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
     it("Should replenish both mint and burn limits simultaneously", async function () {
       // Drain both limits significantly
       await contractInstance.connect(testMinter).mint(user1.address, PER_TX_CAP);
+      
+      // User1 must approve testMinter to burn their tokens
+      await contractInstance.connect(user1).approve(testMinter.address, PER_TX_CAP);
       await contractInstance.connect(testMinter).burn(user1.address, PER_TX_CAP);
       
       const mintLimitBefore = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);

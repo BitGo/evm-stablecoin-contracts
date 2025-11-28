@@ -241,6 +241,9 @@ describe("Supply Validator", function () {
     it("Should call validator on native burn operations", async function () {
       const burnAmount = ethers.parseUnits("1000", 6);
       
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
+      
       await contractInstance.connect(minter).burn(recipient.address, burnAmount);
       
       expect(await mockValidator.burnCallCount()).to.equal(1);
@@ -253,6 +256,9 @@ describe("Supply Validator", function () {
     it("Should pass correct parameters to validator for native burn", async function () {
       const burnAmount = ethers.parseUnits("2000", 6);
       
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
+      
       await contractInstance.connect(minter).burn(recipient.address, burnAmount);
       
       expect(await mockValidator.lastBurnAccount()).to.equal(recipient.address);
@@ -263,6 +269,9 @@ describe("Supply Validator", function () {
 
     it("Should revert burn if validator reverts", async function () {
       const burnAmount = ethers.parseUnits("1000", 6);
+      
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
       
       // Configure validator to reject burns
       await mockValidator.setRejectBurn(true);
@@ -275,6 +284,9 @@ describe("Supply Validator", function () {
     it("Should allow burn when validator accepts", async function () {
       const burnAmount = ethers.parseUnits("1000", 6);
       const initialBalance = await contractInstance.balanceOf(recipient.address);
+      
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
       
       await expect(
         contractInstance.connect(minter).burn(recipient.address, burnAmount)
@@ -298,6 +310,9 @@ describe("Supply Validator", function () {
     it("Should call validator on bridge burn operations", async function () {
       const burnAmount = ethers.parseUnits("1500", 6);
       
+      // Recipient must approve bridgeMinter to burn their tokens
+      await contractInstance.connect(recipient).approve(bridgeMinter.address, burnAmount);
+      
       await contractInstance.connect(bridgeMinter).bridgeBurn(recipient.address, burnAmount);
       
       expect(await mockValidator.burnCallCount()).to.equal(1);
@@ -310,6 +325,9 @@ describe("Supply Validator", function () {
     it("Should pass correct parameters to validator for bridge burn", async function () {
       const burnAmount = ethers.parseUnits("2500", 6);
       
+      // Recipient must approve bridgeMinter to burn their tokens
+      await contractInstance.connect(recipient).approve(bridgeMinter.address, burnAmount);
+      
       await contractInstance.connect(bridgeMinter).bridgeBurn(recipient.address, burnAmount);
       
       expect(await mockValidator.lastBurnAccount()).to.equal(recipient.address);
@@ -320,6 +338,9 @@ describe("Supply Validator", function () {
 
     it("Should revert bridge burn if validator reverts", async function () {
       const burnAmount = ethers.parseUnits("1500", 6);
+      
+      // Recipient must approve bridgeMinter to burn their tokens
+      await contractInstance.connect(recipient).approve(bridgeMinter.address, burnAmount);
       
       // Configure validator to reject burns
       await mockValidator.setRejectBurn(true);
@@ -358,6 +379,9 @@ describe("Supply Validator", function () {
       // Mint first
       await contractInstance.connect(minter).mint(recipient.address, mintAmount);
       
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
+      
       // Burn without validator
       await contractInstance.connect(minter).burn(recipient.address, burnAmount);
       
@@ -371,6 +395,9 @@ describe("Supply Validator", function () {
       
       // Mint first
       await contractInstance.connect(bridgeMinter).bridgeMint(recipient.address, mintAmount);
+      
+      // Recipient must approve bridgeMinter to burn their tokens
+      await contractInstance.connect(recipient).approve(bridgeMinter.address, burnAmount);
       
       // Burn without validator
       await contractInstance.connect(bridgeMinter).bridgeBurn(recipient.address, burnAmount);
@@ -425,6 +452,9 @@ describe("Supply Validator", function () {
       await contractInstance.connect(minter).mint(recipient.address, mintAmount);
       expect(await mockValidator.mintCallCount()).to.equal(1);
       expect(await mockValidator.burnCallCount()).to.equal(0);
+      
+      // Recipient must approve minter to burn their tokens
+      await contractInstance.connect(recipient).approve(minter.address, burnAmount);
       
       await contractInstance.connect(minter).burn(recipient.address, burnAmount);
       expect(await mockValidator.mintCallCount()).to.equal(1);
