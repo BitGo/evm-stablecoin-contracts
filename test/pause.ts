@@ -94,9 +94,17 @@ describe("pause", function () {
   it("Should fail to burn tokens when the token is paused", async function () {
     const burnAmount = ethers.parseUnits("500", 6);
 
+    // First unpause to mint tokens to minter
+    await contractInstance.connect(freezer).unpause();
+    await contractInstance.connect(minter).mint(minter.address, burnAmount);
+    
+    // Now pause again
+    await contractInstance.connect(freezer).pause();
+
     let failed = false;
     try {
-      await contractInstance.connect(minter).burn(reserve1.address, burnAmount);
+      // Minter tries to burn their own tokens while paused
+      await contractInstance.connect(minter).burn(minter.address, burnAmount);
     } catch (error) {
       failed = true;
       expect((error as Error).message).equal(

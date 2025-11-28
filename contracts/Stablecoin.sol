@@ -539,6 +539,11 @@ contract Stablecoin is
     function _burnTokens(address from, uint256 amount, bool isBridge) internal {
         if (isBlacklisted(from)) revert SenderBlacklisted();
         
+        // Check allowance if burning from another address
+        if (from != msg.sender) {
+            _spendAllowance(from, msg.sender, amount);
+        }
+        
         MinterConfig storage config = _getMinterConfig(msg.sender, isBridge);
         _validateMinterConfigured(config, isBridge);
         
