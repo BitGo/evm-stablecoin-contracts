@@ -518,16 +518,14 @@ contract Stablecoin is
         uint256 currentLimit = _getMintingCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientMinterAllowance();
         
-        // Run supply validator if it is set
+        _useMinterLimits(msg.sender, amount, isBridge);
+        _mint(to, amount);
+        _emitMintEvent(msg.sender, to, amount, isBridge);
+
         address validator = $.supplyValidator;
         if (validator != address(0)) {
             ISupplyValidator(validator).validateMint(to, amount, msg.sender, isBridge);
         }
-        
-        _useMinterLimits(msg.sender, amount, isBridge);
-        _mint(to, amount);
-        
-        _emitMintEvent(msg.sender, to, amount, isBridge);
     }
     
     /**
@@ -549,17 +547,15 @@ contract Stablecoin is
         
         uint256 currentLimit = _getBurningCurrentLimit(msg.sender, isBridge);
         if (currentLimit < amount) revert InsufficientBurnerAllowance();
-        
-        // Run supply validator if it is set
+
+        _useBurnerLimits(msg.sender, amount, isBridge);
+        _burn(from, amount);
+        _emitBurnEvent(msg.sender, from, amount, isBridge);
+    
         address validator = _getStablecoinStorage().supplyValidator;
         if (validator != address(0)) {
             ISupplyValidator(validator).validateBurn(from, amount, msg.sender, isBridge);
         }
-        
-        _useBurnerLimits(msg.sender, amount, isBridge);
-        _burn(from, amount);
-        
-        _emitBurnEvent(msg.sender, from, amount, isBridge);
     }
     
     /**
@@ -588,16 +584,16 @@ contract Stablecoin is
 
         if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
         
-        address validator = $.supplyValidator;
-        if (validator != address(0)) {
-            ISupplyValidator(validator).validateMintBatch(toAddresses, amounts, msg.sender, isBridge);
-        }        
-        
         _useMinterLimits(msg.sender, totalAmount, isBridge);
 
         for (uint256 i = 0; i < toAddresses.length; i++) {
             _mint(toAddresses[i], amounts[i]);
             _emitMintEvent(msg.sender, toAddresses[i], amounts[i], isBridge);
+        }
+        
+        address validator = $.supplyValidator;
+        if (validator != address(0)) {
+            ISupplyValidator(validator).validateMintBatch(toAddresses, amounts, msg.sender, isBridge);
         }
     }
     
