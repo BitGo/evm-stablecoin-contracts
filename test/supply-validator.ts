@@ -71,7 +71,7 @@ describe("Supply Validator", function () {
         contractInstance.connect(defaultAdmin).setSupplyValidator(mockValidator.getAddress())
       )
         .to.emit(contractInstance, "SupplyValidatorUpdated")
-        .withArgs(addressZero, await mockValidator.getAddress());
+        .withArgs(addressZero, await mockValidator.getAddress(), defaultAdmin.address);
 
       expect(await contractInstance.getSupplyValidator()).to.equal(await mockValidator.getAddress());
     });
@@ -92,7 +92,7 @@ describe("Supply Validator", function () {
         contractInstance.connect(defaultAdmin).setSupplyValidator(addressZero)
       )
         .to.emit(contractInstance, "SupplyValidatorUpdated")
-        .withArgs(await mockValidator.getAddress(), addressZero);
+        .withArgs(await mockValidator.getAddress(), addressZero, defaultAdmin.address);
 
       expect(await contractInstance.getSupplyValidator()).to.equal(addressZero);
     });
@@ -111,7 +111,7 @@ describe("Supply Validator", function () {
         contractInstance.connect(defaultAdmin).setSupplyValidator(validatorAddress)
       )
         .to.emit(contractInstance, "SupplyValidatorUpdated")
-        .withArgs(addressZero, validatorAddress);
+        .withArgs(addressZero, validatorAddress, defaultAdmin.address);
     });
 
     it("Should update validator from one address to another", async function () {
@@ -130,7 +130,7 @@ describe("Supply Validator", function () {
         contractInstance.connect(defaultAdmin).setSupplyValidator(validatorAddress2)
       )
         .to.emit(contractInstance, "SupplyValidatorUpdated")
-        .withArgs(validatorAddress1, validatorAddress2);
+        .withArgs(validatorAddress1, validatorAddress2, defaultAdmin.address);
         
       expect(await contractInstance.getSupplyValidator()).to.equal(validatorAddress2);
     });

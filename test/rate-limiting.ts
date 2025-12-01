@@ -81,7 +81,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
           .configureMinter(minter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT)
       )
         .to.emit(contractInstance, "MinterConfigured")
-        .withArgs(minter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT);
+        .withArgs(minter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT, masterMinter.address);
 
       expect(await contractInstance.hasRole(MINTER, minter1.address)).to.be.true;
       expect(await contractInstance.isMinter(minter1.address)).to.be.true;
@@ -96,7 +96,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
           .configureBridgeMinter(bridgeMinter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT)
       )
         .to.emit(contractInstance, "BridgeMinterConfigured")
-        .withArgs(bridgeMinter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT);
+        .withArgs(bridgeMinter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT, masterMinter.address);
 
       expect(await contractInstance.hasRole(BRIDGE_MINTER, bridgeMinter1.address)).to.be.true;
       expect(await contractInstance.isBridgeMinter(bridgeMinter1.address)).to.be.true;
@@ -140,18 +140,21 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
           .configureMinter(minter1.address, newMintLimit, newBurnLimit)
       )
         .to.emit(contractInstance, "MinterLimitsUpdated")
-        .withArgs(minter1.address, newMintLimit, newBurnLimit, false);
+        .withArgs(minter1.address, newMintLimit, newBurnLimit, false, masterMinter.address);
 
       expect(await contractInstance.mintingMaxLimitOf(minter1.address, false)).to.equal(newMintLimit);
       expect(await contractInstance.burningMaxLimitOf(minter1.address, false)).to.equal(newBurnLimit);
     });
 
     it("Should remove a native minter successfully", async function () {
+      const currentMintLimit = ethers.parseUnits("2000000", 6); // From previous test update
+      const currentBurnLimit = ethers.parseUnits("2000000", 6); // From previous test update
+      
       await expect(
         contractInstance.connect(masterMinter).removeMinter(minter1.address)
       )
         .to.emit(contractInstance, "MinterRemoved")
-        .withArgs(minter1.address);
+        .withArgs(minter1.address, currentMintLimit, currentBurnLimit, masterMinter.address);
 
       expect(await contractInstance.hasRole(MINTER, minter1.address)).to.be.false;
       expect(await contractInstance.isMinter(minter1.address)).to.be.false;
@@ -163,7 +166,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
         contractInstance.connect(masterMinter).removeBridgeMinter(bridgeMinter1.address)
       )
         .to.emit(contractInstance, "BridgeMinterRemoved")
-        .withArgs(bridgeMinter1.address);
+        .withArgs(bridgeMinter1.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT, masterMinter.address);
 
       expect(await contractInstance.hasRole(BRIDGE_MINTER, bridgeMinter1.address)).to.be.false;
       expect(await contractInstance.isBridgeMinter(bridgeMinter1.address)).to.be.false;
@@ -638,7 +641,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
           newBurnLimit
         )
       ).to.emit(contractInstance, "MinterLimitsUpdated")
-        .withArgs(randomAddress.address, newMintLimit, newBurnLimit, false);
+        .withArgs(randomAddress.address, newMintLimit, newBurnLimit, false, masterMinter.address);
       
       // Cleanup
       await contractInstance.connect(masterMinter).removeMinter(randomAddress.address);
@@ -652,7 +655,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
           DAILY_BURN_LIMIT
         )
       ).to.emit(contractInstance, "BridgeMinterConfigured")
-        .withArgs(randomAddress.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT);
+        .withArgs(randomAddress.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT, masterMinter.address);
       
       // Cleanup
       await contractInstance.connect(masterMinter).removeBridgeMinter(randomAddress.address);
@@ -729,7 +732,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
         contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false)
       )
         .to.emit(contractInstance, "MinterLimitsReplenished")
-        .withArgs(testMinter.address, false);
+        .withArgs(testMinter.address, false, masterMinter.address);
       
       // Verify limits are now at maximum
       currentMintLimit = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
@@ -762,7 +765,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
         contractInstance.connect(masterMinter).replenishMinterLimits(testBridgeMinter.address, true)
       )
         .to.emit(contractInstance, "MinterLimitsReplenished")
-        .withArgs(testBridgeMinter.address, true);
+        .withArgs(testBridgeMinter.address, true, masterMinter.address);
       
       // Verify limits are now at maximum
       currentMintLimit = await contractInstance.mintingCurrentLimitOf(testBridgeMinter.address, true);
@@ -832,7 +835,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
         contractInstance.connect(masterMinter).replenishMinterLimits(testMinter.address, false)
       )
         .to.emit(contractInstance, "MinterLimitsReplenished")
-        .withArgs(testMinter.address, false);
+        .withArgs(testMinter.address, false, masterMinter.address);
       
       // Limits should still be at max
       const mintLimitAfter = await contractInstance.mintingCurrentLimitOf(testMinter.address, false);
