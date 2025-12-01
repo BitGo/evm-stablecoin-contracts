@@ -15,7 +15,7 @@ contract Blacklistable is
 {
     // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff))
     // From OpenZeppelin Contracts
-    bytes32 private constant ERC20StorageLocation =
+    bytes32 private constant ERC20_STORAGE_LOCATION =
         0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeadabe20bace00;
 
     // Constants for bitmask operations
@@ -189,7 +189,7 @@ contract Blacklistable is
      */
     function getERC20Storage() private pure returns (ERC20Storage storage $) {
         assembly {
-            $.slot := ERC20StorageLocation
+            $.slot := ERC20_STORAGE_LOCATION
         }
     }
 }
