@@ -577,11 +577,11 @@ contract Stablecoin is
         uint256 totalAmount = 0;
         uint256 perTxCap = $.mintCapPerTransaction;
         for (uint256 i = 0; i < toAddresses.length; i++) {
-            if (amounts[i] > perTxCap) revert ExceedsMintTransactionCap();
             if (isBlacklisted(toAddresses[i])) revert RecipientBlacklisted();
             totalAmount += amounts[i];
         }
 
+        if (totalAmount > perTxCap) revert ExceedsMintTransactionCap();
         if (currentLimit < totalAmount) revert InsufficientMinterAllowance();
         
         _useMinterLimits(msg.sender, totalAmount, isBridge);
