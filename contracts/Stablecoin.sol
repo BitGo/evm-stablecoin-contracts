@@ -269,6 +269,21 @@ contract Stablecoin is
      */
     error AccountAlreadyBridgeMinter();
 
+    /**
+     * @dev The operation failed due to invalid decimals value.
+     */
+    error InvalidDecimals();
+
+    /**
+     * @dev The operation failed due to an empty string parameter.
+     */
+    error InvalidString();
+
+    /**
+     * @dev The operation failed due to an invalid delay value.
+     */
+    error InvalidDelay();
+
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -320,6 +335,27 @@ contract Stablecoin is
         address rescuer,
         uint256 defaultMintCap
     ) external initializer {
+        // Validate addresses
+        if (defaultAdmin == address(0)) revert InvalidAddress();
+        if (freezer == address(0)) revert InvalidAddress();
+        if (masterMinter == address(0)) revert InvalidAddress();
+        if (upgrader == address(0)) revert InvalidAddress();
+        if (blacklister == address(0)) revert InvalidAddress();
+        if (rescuer == address(0)) revert InvalidAddress();
+        
+        // Validate strings
+        if (bytes(tokenName).length == 0) revert InvalidString();
+        if (bytes(tokenSymbol).length == 0) revert InvalidString();
+        
+        // Validate decimals (standard ERC20 range)
+        if (tokenDecimals == 0 || tokenDecimals > 18) revert InvalidDecimals();
+        
+        // Validate defaultAdminDelay (non-zero for security)
+        if (defaultAdminDelay == 0) revert InvalidDelay();
+        
+        // Validate defaultMintCap (must meet minimum limit)
+        if (defaultMintCap < _MIN_LIMIT) revert LimitTooLow();
+        
         __ERC20_init(tokenName, tokenSymbol);
         __ERC20Pausable_init();
         __ERC20Permit_init(tokenName);
@@ -822,6 +858,7 @@ contract Stablecoin is
      * @dev Sets the supply validator contract address.
      * Requirements:
      * - Caller must have the `DEFAULT_ADMIN_ROLE` role.
+     * - Setting to zero address disables validation.
      * @param newValidator The address of the new supply validator contract.
      */
     function setSupplyValidator(address newValidator) external onlyRole(DEFAULT_ADMIN_ROLE) {
