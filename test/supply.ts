@@ -92,6 +92,7 @@ describe("Minting,  Burning And Token Rescue", function () {
 
   it("Should update the max mint limit successfully through setter function", async function () {
     const newPerTransactionCap = ethers.parseUnits("2000000", 6); // 2 million tokens
+    const oldPerTransactionCap = await contractInstance.getMintCapPerTransaction();
 
     // Update the max mint limit using the setter function
     await expect(contractInstance
@@ -99,7 +100,7 @@ describe("Minting,  Burning And Token Rescue", function () {
       .setMintCapPerTransaction(newPerTransactionCap)
     )
       .to.emit(contractInstance, "MintCapPerTransactionSet")
-      .withArgs(newPerTransactionCap)
+      .withArgs(oldPerTransactionCap, newPerTransactionCap, defaultAdmin.address)
 
     const currentMaxMintLimit = await contractInstance.getMintCapPerTransaction();
     expect(currentMaxMintLimit).to.equal(newPerTransactionCap);
@@ -173,7 +174,7 @@ describe("Minting,  Burning And Token Rescue", function () {
       transferAmount
       )
       .to.emit(contractInstance, "TokensRescued")
-      .withArgs(contractInstance.getAddress(), recoverAddress.address, transferAmount);
+      .withArgs(contractInstance.getAddress(), recoverAddress.address, transferAmount, rescuer.address);
     const newTokenContractBalance = await contractInstance.balanceOf(
       contractInstance.getAddress()
     );

@@ -119,49 +119,69 @@ contract Stablecoin is
     /**
      * @dev Emitted when a native minter is configured.
      */
-    event MinterConfigured(address indexed minter, uint256 mintLimit, uint256 burnLimit);
+    event MinterConfigured(address indexed minter, uint256 mintLimit, uint256 burnLimit, address indexed configuredBy);
 
     /**
      * @dev Emitted when a bridge minter is configured.
      */
-    event BridgeMinterConfigured(address indexed bridge, uint256 mintLimit, uint256 burnLimit);
+    event BridgeMinterConfigured(
+        address indexed bridge, uint256 mintLimit, uint256 burnLimit, address indexed configuredBy
+    );
 
     /**
      * @dev Emitted when a native minter is removed.
      */
-    event MinterRemoved(address indexed minter);
+    event MinterRemoved(address indexed minter, uint256 mintLimit, uint256 burnLimit, address indexed removedBy);
 
     /**
      * @dev Emitted when a bridge minter is removed.
      */
-    event BridgeMinterRemoved(address indexed bridge);
+    event BridgeMinterRemoved(address indexed bridge, uint256 mintLimit, uint256 burnLimit, address indexed removedBy);
 
     /**
      * @dev Emitted when the mint cap per transaction is set to a new value.
      */
-    event MintCapPerTransactionSet(uint256 newLimit);
+    event MintCapPerTransactionSet(uint256 oldLimit, uint256 newLimit, address indexed setBy);
     
     /**
      * @dev Emitted when an existing minter's limits are updated.
      */
     event MinterLimitsUpdated(
-        address indexed minter, uint256 newMintLimit, uint256 newBurnLimit, bool indexed isBridge
-        );
+        address indexed minter,
+        uint256 newMintLimit,
+        uint256 newBurnLimit,
+        bool indexed isBridge,
+        address indexed updatedBy
+    );
 
     /**
      * @dev Emitted when tokens are rescued from the token address and sent to a `recipient` address.
      */
-    event TokensRescued(address indexed token, address indexed recipient, uint256 amount);
+    event TokensRescued(address indexed token, address indexed recipient, uint256 amount, address indexed rescuedBy);
 
     /**
      * @dev Emitted when the supply validator address is updated.
      */
-    event SupplyValidatorUpdated(address indexed oldValidator, address indexed newValidator);
+    event SupplyValidatorUpdated(address indexed oldValidator, address indexed newValidator, address indexed setBy);
 
     /**
      * @dev Emitted when a minter's limits are replenished to their maximum values in an emergency.
      */
-    event MinterLimitsReplenished(address indexed minter, bool indexed isBridge);
+    event MinterLimitsReplenished(address indexed minter, bool indexed isBridge, address indexed replenishedBy);
+
+    /**
+     * @dev Emitted when a minter's current limit is consumed during mint/burn operations.
+     */
+    event MinterLimitUsed(
+        address indexed minter, uint256 amount, uint256 remainingLimit, bool indexed isBridge, bool isMinting
+    );
+
+    /**
+     * @dev Emitted when a minter or burner limit is changed.
+     */
+    event LimitChanged(
+        address indexed minter, uint256 oldLimit, uint256 newLimit, bool indexed isBridge, bool isMinting
+    );
 
     // --- Custom Errors ---
     /**
@@ -311,7 +331,7 @@ contract Stablecoin is
         _grantRole(UPGRADER_ROLE, upgrader);
         _grantRole(RESCUER_ROLE, rescuer);
         _getStablecoinStorage().mintCapPerTransaction = defaultMintCap;
-        emit MintCapPerTransactionSet(_getStablecoinStorage().mintCapPerTransaction);
+        emit MintCapPerTransactionSet(0, defaultMintCap, msg.sender);
         _getStablecoinStorage().tokenDecimals = tokenDecimals;
     }
 
@@ -371,12 +391,12 @@ contract Stablecoin is
         _changeBurnerLimit(account, burnLimit, isBridge);
         
         if (isUpdate) {
-            emit MinterLimitsUpdated(account, mintLimit, burnLimit, isBridge);
+            emit MinterLimitsUpdated(account, mintLimit, burnLimit, isBridge, msg.sender);
         } else {
             if (isBridge) {
-                emit BridgeMinterConfigured(account, mintLimit, burnLimit);
+                emit BridgeMinterConfigured(account, mintLimit, burnLimit, msg.sender);
             } else {
-                emit MinterConfigured(account, mintLimit, burnLimit);
+                emit MinterConfigured(account, mintLimit, burnLimit, msg.sender);
             }
         }
     }
@@ -428,6 +448,10 @@ contract Stablecoin is
             }
         }
 
+        // Capture limits before deletion
+        uint256 mintLimit = config.minterParams.maxLimit;
+        uint256 burnLimit = config.burnerParams.maxLimit;
+
         delete config.minterParams;
         delete config.burnerParams;
         config.isConfigured = false;
@@ -435,9 +459,9 @@ contract Stablecoin is
         _revokeRole(isBridge ? BRIDGE_MINTER : MINTER, account);
 
         if (isBridge) {
-            emit BridgeMinterRemoved(account);
+            emit BridgeMinterRemoved(account, mintLimit, burnLimit, msg.sender);
         } else {
-            emit MinterRemoved(account);
+            emit MinterRemoved(account, mintLimit, burnLimit, msg.sender);
         }
     }
 
@@ -478,7 +502,7 @@ contract Stablecoin is
         config.burnerParams.currentLimit = config.burnerParams.maxLimit;
         config.burnerParams.timestamp = block.timestamp;
 
-        emit MinterLimitsReplenished(minter, isBridge);
+        emit MinterLimitsReplenished(minter, isBridge, msg.sender);
     }
 
     /**
@@ -771,8 +795,9 @@ contract Stablecoin is
         uint256 newLimit
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newLimit == 0) revert InvalidAmount();
+        uint256 oldLimit = _getStablecoinStorage().mintCapPerTransaction;
         _getStablecoinStorage().mintCapPerTransaction = newLimit;
-        emit MintCapPerTransactionSet(newLimit);
+        emit MintCapPerTransactionSet(oldLimit, newLimit, msg.sender);
     }
 
     /**
@@ -790,7 +815,7 @@ contract Stablecoin is
         if (amount == 0) revert InvalidAmount();
         if (isBlacklisted(recipient)) revert RecipientBlacklisted();
         token.safeTransfer(recipient, amount);
-        emit TokensRescued(address(token), recipient, amount);
+        emit TokensRescued(address(token), recipient, amount, msg.sender);
     }
 
     /**
@@ -803,7 +828,7 @@ contract Stablecoin is
         StablecoinStorage storage $ = _getStablecoinStorage();
         address oldValidator = $.supplyValidator;
         $.supplyValidator = newValidator;
-        emit SupplyValidatorUpdated(oldValidator, newValidator);
+        emit SupplyValidatorUpdated(oldValidator, newValidator, msg.sender);
     }
 
     /**
@@ -975,8 +1000,13 @@ contract Stablecoin is
      * @dev Uses the minter/burner limit by reducing the current limit.
      * @param params The minter parameters to update.
      * @param amount The amount to reduce from the limit.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @param isMinting Whether this is a minting operation (true) or burning operation (false).
      */
-    function _useLimits(MinterParams storage params, uint256 amount) internal {
+    function _useLimits(
+        MinterParams storage params, uint256 amount, address minter, bool isBridge, bool isMinting
+    ) internal {
         uint256 currentLimit = _getCurrentLimit(
             params.currentLimit,
             params.maxLimit,
@@ -985,14 +1015,20 @@ contract Stablecoin is
         );
         params.timestamp = block.timestamp;
         params.currentLimit = currentLimit - amount;
+        emit MinterLimitUsed(minter, amount, params.currentLimit, isBridge, isMinting);
     }
 
     /**
      * @dev Updates the limit for minter/burner parameters.
      * @param params The minter parameters to update.
      * @param newLimit The new limit value.
+     * @param minter The address of the minter.
+     * @param isBridge Whether this is a bridge minter.
+     * @param isMinting Whether this is a minting limit (true) or burning limit (false).
      */
-    function _changeLimit(MinterParams storage params, uint256 newLimit) internal {
+    function _changeLimit(
+        MinterParams storage params, uint256 newLimit, address minter, bool isBridge, bool isMinting
+    ) internal {
         uint256 oldLimit = params.maxLimit;
         uint256 currentLimit = _getCurrentLimit(
             params.currentLimit,
@@ -1004,6 +1040,7 @@ contract Stablecoin is
         params.currentLimit = _calculateNewCurrentLimit(newLimit, oldLimit, currentLimit);
         params.ratePerSecond = newLimit / _DURATION;
         params.timestamp = block.timestamp;
+        emit LimitChanged(minter, oldLimit, newLimit, isBridge, isMinting);
     }
 
     /**
@@ -1097,7 +1134,7 @@ contract Stablecoin is
      */
     function _useMinterLimits(address minter, uint256 amount, bool isBridge) internal {
         MinterConfig storage config = _getMinterConfig(minter, isBridge);
-        _useLimits(config.minterParams, amount);
+        _useLimits(config.minterParams, amount, minter, isBridge, true);
     }
 
     /**
@@ -1108,7 +1145,7 @@ contract Stablecoin is
      */
     function _useBurnerLimits(address minter, uint256 amount, bool isBridge) internal {
         MinterConfig storage config = _getMinterConfig(minter, isBridge);
-        _useLimits(config.burnerParams, amount);
+        _useLimits(config.burnerParams, amount, minter, isBridge, false);
     }
 
     /**
@@ -1119,7 +1156,7 @@ contract Stablecoin is
      */
     function _changeMinterLimit(address minter, uint256 limit, bool isBridge) internal {
         MinterConfig storage config = _getMinterConfig(minter, isBridge);
-        _changeLimit(config.minterParams, limit);
+        _changeLimit(config.minterParams, limit, minter, isBridge, true);
     }
 
     /**
@@ -1130,7 +1167,7 @@ contract Stablecoin is
      */
     function _changeBurnerLimit(address minter, uint256 limit, bool isBridge) internal {
         MinterConfig storage config = _getMinterConfig(minter, isBridge);
-        _changeLimit(config.burnerParams, limit);
+        _changeLimit(config.burnerParams, limit, minter, isBridge, false);
     }
 
     /**
