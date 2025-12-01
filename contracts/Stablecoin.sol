@@ -29,7 +29,7 @@ contract Stablecoin is
     using SafeERC20 for IERC20;
 
     // keccak256(abi.encode(uint256(keccak256("contract.storage.Stablecoin")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant StablecoinStorageLocation = 
+    bytes32 private constant STABLECOIN_STORAGE_LOCATION = 
                     0x9b2d10d13c5ae4f59a8184d905810047d3ab7f6fe6302078b828a0112a6ab900;
 
     /**
@@ -428,11 +428,9 @@ contract Stablecoin is
             }
         }
 
+        delete config.minterParams;
+        delete config.burnerParams;
         config.isConfigured = false;
-        config.minterParams.maxLimit = 0;
-        config.minterParams.currentLimit = 0;
-        config.burnerParams.maxLimit = 0;
-        config.burnerParams.currentLimit = 0;
 
         _revokeRole(isBridge ? BRIDGE_MINTER : MINTER, account);
 
@@ -1165,7 +1163,7 @@ contract Stablecoin is
      */
     function _getStablecoinStorage() private pure returns (StablecoinStorage storage $) {
         assembly {
-            $.slot := StablecoinStorageLocation
+            $.slot := STABLECOIN_STORAGE_LOCATION
         }
     }
 }
