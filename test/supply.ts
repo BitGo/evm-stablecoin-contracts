@@ -361,6 +361,117 @@ describe("Minting,  Burning And Token Rescue", function () {
     expect(failed).to.be.true;
   });
 
+  describe("Batch Mint Cap Enforcement Tests", function () {
+    it("Should succeed when total batch amount equals cap", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const amount1 = cap / 3n;
+      const amount2 = cap / 3n;
+      const amount3 = cap - amount1 - amount2; // Remaining to equal cap exactly
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(
+          [user1.address, user2.address, user3.address],
+          [amount1, amount2, amount3]
+        )
+      ).to.emit(contractInstance, "MintNative");
+
+      expect(await contractInstance.balanceOf(user1.address)).to.be.gte(amount1);
+      expect(await contractInstance.balanceOf(user2.address)).to.be.gte(amount2);
+      expect(await contractInstance.balanceOf(user3.address)).to.be.gte(amount3);
+    });
+
+    it("Should revert when total batch amount exceeds cap with valid individual amounts", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const amount1 = cap / 2n + ethers.parseUnits("1", 6);
+      const amount2 = cap / 2n + ethers.parseUnits("1", 6);
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(
+          [user1.address, user2.address],
+          [amount1, amount2]
+        )
+      ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
+    });
+
+    it("Should prevent same address from receiving more than cap via batch (duplicate address exploit)", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const amount = cap / 2n + ethers.parseUnits("1", 6);
+
+      // Same address appears twice - total exceeds cap
+      await expect(
+        contractInstance.connect(minter).mintBatch(
+          [user1.address, user1.address],
+          [amount, amount]
+        )
+      ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
+    });
+
+    it("Should allow multiple recipients if total is within cap", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const amount = cap / 4n;
+
+      const balancesBefore = {
+        user1: await contractInstance.balanceOf(user1.address),
+        user2: await contractInstance.balanceOf(user2.address),
+        user3: await contractInstance.balanceOf(user3.address),
+      };
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(
+          [user1.address, user2.address, user3.address],
+          [amount, amount, amount]
+        )
+      ).to.emit(contractInstance, "MintNative");
+
+      expect(await contractInstance.balanceOf(user1.address)).to.equal(balancesBefore.user1 + amount);
+      expect(await contractInstance.balanceOf(user2.address)).to.equal(balancesBefore.user2 + amount);
+      expect(await contractInstance.balanceOf(user3.address)).to.equal(balancesBefore.user3 + amount);
+    });
+
+    it("Should revert when single large total amount exceeds cap", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const exceedingAmount = cap + ethers.parseUnits("1", 6);
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(
+          [user1.address],
+          [exceedingAmount]
+        )
+      ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
+    });
+
+    it("Should handle edge case with many small amounts that exceed cap", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const smallAmount = cap / 10n;
+      
+      // 11 small amounts = 110% of cap
+      const addresses = Array(11).fill(user1.address);
+      const amounts = Array(11).fill(smallAmount);
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(addresses, amounts)
+      ).to.be.revertedWithCustomError(contractInstance, "ExceedsMintTransactionCap");
+    });
+
+    it("Should succeed with many small amounts that don't exceed cap", async function () {
+      const cap = await contractInstance.getMintCapPerTransaction();
+      const smallAmount = cap / 10n;
+      
+      // 9 small amounts = 90% of cap
+      const addresses = Array(9).fill(reserve1.address);
+      const amounts = Array(9).fill(smallAmount);
+
+      const balanceBefore = await contractInstance.balanceOf(reserve1.address);
+
+      await expect(
+        contractInstance.connect(minter).mintBatch(addresses, amounts)
+      ).to.emit(contractInstance, "MintNative");
+
+      const balanceAfter = await contractInstance.balanceOf(reserve1.address);
+      expect(balanceAfter - balanceBefore).to.equal(smallAmount * 9n);
+    });
+  });
+
   describe("Native Burn Authorization Tests", function () {
     it("Should allow minter to burn their own tokens without approval", async function () {
       const mintAmount = ethers.parseUnits("1000", 6);
