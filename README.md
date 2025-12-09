@@ -43,7 +43,7 @@ Add the following environment variables to your `.env`:
 # Deployment Configuration
 DEPLOYMENT_KEY=<your-private-key>
 ETHERSCAN_API_KEY=<your-etherscan-api-key>
-ALCHEMY_API_KEY=<your-alchemy-api-key>
+INFURA_API_KEY=<your-infura-api-key>
 
 # Token Configuration
 TOKEN_NAME=GoUSD                    # e.g., "GoUSD", "GoEUR", "GoGBP"
