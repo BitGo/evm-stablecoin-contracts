@@ -9,7 +9,8 @@ dotenv.config();
 
 const {
   DEPLOYMENT_KEY,
-  ETHERSCAN_API_KEY
+  ETHERSCAN_API_KEY,
+  INFURA_API_KEY
 } = process.env;
 
 const config: HardhatUserConfig = {
@@ -32,8 +33,13 @@ const config: HardhatUserConfig = {
       accounts: DEPLOYMENT_KEY? [`${DEPLOYMENT_KEY}`]: [],
       chainId: 17000,
     },
+    sepolia: {
+      url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 11155111,
+    },
     mainnet: {
-      url: `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+      url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 1,
     },
@@ -44,22 +50,35 @@ const config: HardhatUserConfig = {
     }
   },
   etherscan: {
-    apiKey: `${ETHERSCAN_API_KEY}`,
+    enabled: true,
+    apiKey: {
+      mainnet: `${ETHERSCAN_API_KEY}`,
+      sepolia: `${ETHERSCAN_API_KEY}`,
+      holesky: `${ETHERSCAN_API_KEY}`,
+    },
     customChains: [
+      {
+        network: 'mainnet',
+        chainId: 1,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=1',
+          browserURL: 'https://etherscan.io'
+        }
+      },
       {
         network: 'holesky',
         chainId: 17000,
         urls: {
-          apiURL: 'https://api-holesky.etherscan.io/api',
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=17000',
           browserURL: 'https://holesky.etherscan.io'
         }
       },
       {
-        network: 'hoodi',
-        chainId: 560048,
+        network: 'sepolia',
+        chainId: 11155111,
         urls: {
-          apiURL: 'https://api-hoodi.etherscan.io/api',
-          browserURL: 'https://hoodi.etherscan.io'
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=11155111',
+          browserURL: 'https://sepolia.etherscan.io'
         }
       },
     ],
