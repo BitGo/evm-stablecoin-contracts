@@ -55,6 +55,7 @@ const config: HardhatUserConfig = {
       mainnet: `${ETHERSCAN_API_KEY}`,
       sepolia: `${ETHERSCAN_API_KEY}`,
       holesky: `${ETHERSCAN_API_KEY}`,
+      hoodi: `${ETHERSCAN_API_KEY}`,
     },
     customChains: [
       {
@@ -81,6 +82,14 @@ const config: HardhatUserConfig = {
           browserURL: 'https://sepolia.etherscan.io'
         }
       },
+      {
+        network: 'hoodi',
+        chainId: 560048,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=560048',
+          browserURL: 'https://hoodi.etherscan.io'
+        }
+      }
     ],
   }
 };

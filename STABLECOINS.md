@@ -31,7 +31,7 @@ export BLACKLISTER_ADDRESS=0x5678901234567890123456789012345678901234
 export RESCUER_ADDRESS=0x6789012345678901234567890123456789012345
 
 # Deploy to testnet first
-npx hardhat run scripts/deploy-token.ts --network sepolia
+npx hardhat run scripts/deploy-token.ts --network hoodi
 
 # After testing, deploy to mainnet
 npx hardhat run scripts/deploy-token.ts --network mainnet

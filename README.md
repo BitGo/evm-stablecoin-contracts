@@ -41,7 +41,7 @@ Add the following environment variables to your `.env`:
 
 ```bash
 # Deployment Configuration
-DEPLOYMENT_KEY=<your-private-key>
+DEPLOYMENT_KEY=0x<your-private-key>
 ETHERSCAN_API_KEY=<your-etherscan-api-key>
 INFURA_API_KEY=<your-infura-api-key>
 
@@ -60,6 +60,30 @@ UPGRADER_ADDRESS=<upgrader-wallet-address>
 BLACKLISTER_ADDRESS=<blacklister-wallet-address>
 RESCUER_ADDRESS=<rescuer-wallet-address>
 ```
+
+#### Obtaining DEPLOYMENT_KEY using MetaMask
+
+Install [metamask]
+(https://chromewebstore.google.com/detail/metamask/nkbihfbeogaeaoehlefnkodbefgpgknn?hl=en&pli=1)
+and setup your account. Detailed info is avialable [here](https://bitgoinc.atlassian.net/wiki/spaces/ENG/pages/4311253024/Minting+testnet+Hoodi+tokens).
+
+After that execute the following steps:
+1. Open MetaMask
+2. Click the three dots menu → Account Details
+3. Show Private Key
+4. Enter your password
+5. Copy the private key (starts with 0x)
+
+#### Obtaining ETHERSCAN_API_KEY
+
+1. Go to [https://etherscan.io/](https://etherscan.io/) (or the respective block explorer for your network)
+2. Sign up or log in to your account
+3. Navigate to **API Keys** under your profile menu
+4. Click **Add** to create a new API key
+5. Give it a name (e.g., "Testnet Deployments")
+6. Copy the generated API key
+
+**Note:** The same Etherscan account works for multiple networks (mainnet, hoodi, etc.)
 
 ### Deploy Command
 
