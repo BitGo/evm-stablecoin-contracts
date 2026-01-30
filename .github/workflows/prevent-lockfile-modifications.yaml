@@ -4,6 +4,6 @@ on:
 jobs:
   prevent-lockfile-modifications:
     name: Prevent Lockfile Modifications
-    uses: BitGo/static-analysis/.github/workflows/prevent-lockfile-modifications.yaml@v1
+    uses: BitGo/build-system/.github/workflows/prevent-lockfile-modifications.yaml@v6
     secrets:
       vault-cf-access-client-secret: ${{ secrets.VAULT_CF_ACCESS_CLIENT_SECRET }}
