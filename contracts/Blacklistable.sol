@@ -1,3 +1,4 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.30;
 

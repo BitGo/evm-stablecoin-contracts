@@ -1,25 +1,30 @@
-# Stablecoin Contract
+# Stablecoin EVM
 
-Generic stablecoin contract using UUPS upgradeable proxy pattern. Deploy multiple stablecoins (GoUSD, GoEUR, GoGBP, etc.) using a single reusable contract.
+Generic stablecoin smart contract system using the UUPS upgradeable proxy pattern. Deploy multiple stablecoins (GoUSD, GoEUR, GoGBP, etc.) from a single reusable contract.
 
 ## Architecture
 
 The codebase uses a **generic Stablecoin contract** that can be deployed multiple times with different initialization parameters to create different tokens. No need for separate contract files for each currency.
 
 **Key Benefits:**
-- ✅ Single contract for all stablecoins
-- ✅ Consistent behavior across all tokens
-- ✅ Easy deployment of new currencies
-- ✅ Simplified maintenance and upgrades
+- Single contract for all stablecoins
+- Consistent behavior across all tokens
+- Easy deployment of new currencies
+- Simplified maintenance and upgrades
 
 ## Roles
 
 - **owner**: deploys the proxy
-- **upgrader**: can upgrade the contracts
-- **supplyController**: can mint and burn tokens
-- **freezer**: can pause/unpause contracts
-- **blacklister**: can freeze addresses
-- **rescuer**: can rescue stuck tokens from the contract
+- **upgrader**: can upgrade the contracts (UPGRADER_ROLE)
+- **supplyController**: can mint and burn tokens (SUPPLY_CONTROLLER_ROLE)
+- **freezer**: can pause/unpause contracts (FREEZER_ROLE)
+- **blacklister**: can blacklist addresses (BLACKLISTER_ROLE)
+- **rescuer**: can rescue stuck tokens from the contract (RESCUER_ROLE)
+
+## Prerequisites
+
+- Node.js >= 20.0.0
+- npm
 
 ## Installing Dependencies
 
@@ -27,17 +32,29 @@ The codebase uses a **generic Stablecoin contract** that can be deployed multipl
 npm install
 ```
 
-## Testing the Contract
+## Testing
 
 ```bash
 npm test
+```
+
+## Linting
+
+```bash
+npm run lint
 ```
 
 ## Deploying a Stablecoin
 
 ### Environment Variables
 
-Add the following environment variables to your `.env`:
+Copy the example environment file and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with your configuration:
 
 ```bash
 # Deployment Configuration
@@ -61,33 +78,9 @@ BLACKLISTER_ADDRESS=<blacklister-wallet-address>
 RESCUER_ADDRESS=<rescuer-wallet-address>
 ```
 
-#### Obtaining DEPLOYMENT_KEY using MetaMask
-
-Install [metamask]
-(https://chromewebstore.google.com/detail/metamask/nkbihfbeogaeaoehlefnkodbefgpgknn?hl=en&pli=1)
-and setup your account. Detailed info is avialable [here](https://bitgoinc.atlassian.net/wiki/spaces/ENG/pages/4311253024/Minting+testnet+Hoodi+tokens).
-
-After that execute the following steps:
-1. Open MetaMask
-2. Click the three dots menu → Account Details
-3. Show Private Key
-4. Enter your password
-5. Copy the private key (starts with 0x)
-
-#### Obtaining ETHERSCAN_API_KEY
-
-1. Go to [https://etherscan.io/](https://etherscan.io/) (or the respective block explorer for your network)
-2. Sign up or log in to your account
-3. Navigate to **API Keys** under your profile menu
-4. Click **Add** to create a new API key
-5. Give it a name (e.g., "Testnet Deployments")
-6. Copy the generated API key
-
-**Note:** The same Etherscan account works for multiple networks (mainnet, hoodi, etc.)
-
 ### Deploy Command
 
-Deploy to any network from your Hardhat config:
+Deploy to any network configured in `hardhat.config.ts`:
 
 ```bash
 npx hardhat run scripts/deploy-token.ts --network <network-name>
@@ -96,16 +89,12 @@ npx hardhat run scripts/deploy-token.ts --network <network-name>
 **Examples:**
 
 ```bash
-# Deploy GoUSD to mainnet
+# Deploy to mainnet
 TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 DEFAULT_MINT_CAP=1000000000000 \
 npx hardhat run scripts/deploy-token.ts --network mainnet
 
-# Deploy GoEUR to mainnet
-TOKEN_NAME=GoEUR TOKEN_SYMBOL=GoEUR TOKEN_DECIMALS=6 DEFAULT_MINT_CAP=1000000000000 \
-npx hardhat run scripts/deploy-token.ts --network mainnet
-
-# Deploy GoGBP to testnet
-TOKEN_NAME=GoGBP TOKEN_SYMBOL=GoGBP TOKEN_DECIMALS=6 DEFAULT_MINT_CAP=1000000000000 \
+# Deploy to testnet
+TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 DEFAULT_MINT_CAP=1000000000000 \
 npx hardhat run scripts/deploy-token.ts --network sepolia
 ```
 
@@ -119,8 +108,18 @@ npx hardhat verify --network <network-name> <implementation-address>
 
 ## Documentation
 
-For detailed information about deploying multiple stablecoins, see [STABLECOINS.md](./STABLECOINS.md).
+For detailed information about deploying multiple stablecoins and the upgrade process, see [STABLECOINS.md](./STABLECOINS.md).
+
+## Security
+
+For information about reporting security vulnerabilities, see [SECURITY.md](./SECURITY.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-Apache-2.0
+Copyright (c) 2025 BitGo, Inc. All rights reserved.
+
+Licensed under the [Apache License 2.0](./LICENSE).

@@ -5,3 +5,4 @@ typechain-types
 .env
 .DS_Store
 .openzeppelin
+CLAUDE.md
