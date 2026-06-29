@@ -1,3 +1,6 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";

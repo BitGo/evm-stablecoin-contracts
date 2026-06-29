@@ -1,22 +1,23 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import { ethers, upgrades } from "hardhat";
 
 /**
  * Generic deployment script for stablecoin tokens using the Stablecoin contract
  * 
  * Usage:
- *   TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
- *   TOKEN_NAME=GoEUR TOKEN_SYMBOL=GoEUR TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
- *   TOKEN_NAME=GoGBP TOKEN_SYMBOL=GoGBP TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
- * 
+ *   TOKEN_NAME=MyStablecoin TOKEN_SYMBOL=MYUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
+ *
  * Environment variables required:
- * - TOKEN_NAME: Full name of the token (e.g., "GoUSD", "GoEUR", "GoGBP")
- * - TOKEN_SYMBOL: Symbol of the token (e.g., "GoUSD", "GoEUR", "GoGBP")
+ * - TOKEN_NAME: Full name of the token (e.g., "MyStablecoin")
+ * - TOKEN_SYMBOL: Symbol of the token (e.g., "MYUSD")
  * - TOKEN_DECIMALS: Number of decimals (e.g., 6)
  * - DEFAULT_MINT_CAP: Default mint cap per transaction in token's smallest unit (e.g., 1000000000000 for 1M tokens with 6 decimals)
  * - ADMIN_ADDRESS: Default admin address
  * - DEFAULT_ADMIN_DELAY: Delay in seconds before admin can be changed
  * - FREEZER_ADDRESS: Address for freezer role
- * - SUPPLY_CONTROLLER_ADDRESS: Address for supply controller role
+ * - MASTER_MINTER_ADDRESS: Address for master minter role (MASTER_MINTER_ROLE)
  * - UPGRADER_ADDRESS: Address for upgrader role
  * - BLACKLISTER_ADDRESS: Address for blacklister role
  * - RESCUER_ADDRESS: Address for rescuer role
@@ -28,11 +29,11 @@ async function main() {
   const defaultMintCap = process.env.DEFAULT_MINT_CAP;
 
   if (!tokenName) {
-    throw new Error("TOKEN_NAME environment variable is required (e.g., 'GoUSD', 'GoEUR', 'GoGBP')");
+    throw new Error("TOKEN_NAME environment variable is required (e.g., 'MyStablecoin')");
   }
 
   if (!tokenSymbol) {
-    throw new Error("TOKEN_SYMBOL environment variable is required (e.g., 'GoUSD', 'GoEUR', 'GoGBP')");
+    throw new Error("TOKEN_SYMBOL environment variable is required (e.g., 'MYUSD')");
   }
 
   if (!tokenDecimals) {
@@ -49,7 +50,7 @@ async function main() {
 
   const {
     FREEZER_ADDRESS,
-    SUPPLY_CONTROLLER_ADDRESS,
+    MASTER_MINTER_ADDRESS,
     UPGRADER_ADDRESS,
     ADMIN_ADDRESS,
     BLACKLISTER_ADDRESS,
@@ -62,7 +63,7 @@ async function main() {
   if (!ADMIN_ADDRESS) missingVars.push('ADMIN_ADDRESS');
   if (!DEFAULT_ADMIN_DELAY) missingVars.push('DEFAULT_ADMIN_DELAY');
   if (!FREEZER_ADDRESS) missingVars.push('FREEZER_ADDRESS');
-  if (!SUPPLY_CONTROLLER_ADDRESS) missingVars.push('SUPPLY_CONTROLLER_ADDRESS');
+  if (!MASTER_MINTER_ADDRESS) missingVars.push('MASTER_MINTER_ADDRESS');
   if (!UPGRADER_ADDRESS) missingVars.push('UPGRADER_ADDRESS');
   if (!BLACKLISTER_ADDRESS) missingVars.push('BLACKLISTER_ADDRESS');
   if (!RESCUER_ADDRESS) missingVars.push('RESCUER_ADDRESS');
@@ -86,7 +87,7 @@ async function main() {
       ADMIN_ADDRESS,
       DEFAULT_ADMIN_DELAY,
       FREEZER_ADDRESS,
-      SUPPLY_CONTROLLER_ADDRESS,
+      MASTER_MINTER_ADDRESS,
       UPGRADER_ADDRESS,
       BLACKLISTER_ADDRESS,
       RESCUER_ADDRESS,

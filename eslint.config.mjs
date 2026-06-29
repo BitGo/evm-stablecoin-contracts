@@ -1,3 +1,6 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import chaiFriendly from "eslint-plugin-chai-friendly";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

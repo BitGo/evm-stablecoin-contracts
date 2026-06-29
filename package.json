@@ -1,7 +1,7 @@
 {
-  "name": "gousd",
-  "version": "0.0.2",
-  "description": "",
+  "name": "stablecoin-evm",
+  "version": "1.0.0",
+  "description": "Generic stablecoin smart contract system using UUPS upgradeable proxy pattern",
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",

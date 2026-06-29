@@ -1,6 +1,9 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-verify"
+import "@nomicfoundation/hardhat-verify";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomiclabs/hardhat-solhint";
 import "@openzeppelin/hardhat-upgrades";
