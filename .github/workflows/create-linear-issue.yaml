@@ -1,0 +1,44 @@
+name: Create Linear Issue
+run-name: "Create Linear Issue: PR #${{ github.event.workflow_run.pull_requests[0].number }}"
+
+# When CI fails on a pull request, create a Linear issue assigned to
+# Ralph so he can debug the failure and get CI passing.
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+jobs:
+  create-linear-issue:
+    name: Create Linear Issue for Ralph
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+
+    steps:
+      - name: Create Linear issue and assign to Ralph
+        uses: BitGo/create-linear-issue@v1
+        with:
+          title: "Fix CI failure on PR #${{ github.event.workflow_run.pull_requests[0].number }}"
+          assign-to-agent: "true"
+          description: |
+            CI failed on a pull request. Ralph should debug the failure and
+            get CI passing.
+
+            ## PR details
+
+            - **Repository:** ${{ github.repository }}
+            - **PR:** #${{ github.event.workflow_run.pull_requests[0].number }} — ${{ github.event.workflow_run.pull_requests[0].head.ref }}
+            - **PR URL:** ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.workflow_run.pull_requests[0].number }}
+            - **Failed workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+            - **Head SHA:** ${{ github.event.workflow_run.head_sha }}
+            - **Author:** @${{ github.event.workflow_run.actor.login }}
