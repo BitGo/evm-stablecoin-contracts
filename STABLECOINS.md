@@ -1,6 +1,6 @@
 # Stablecoin Architecture Guide
 
-This guide explains how to deploy and manage multiple stablecoins (GoUSD, GoEUR, GoGBP, etc.) using the generic Stablecoin contract.
+This guide explains how to deploy and manage multiple stablecoins from a single generic Stablecoin contract.
 
 ## Architecture Overview
 
@@ -18,14 +18,14 @@ Simply run the deployment script with the appropriate parameters:
 
 ```bash
 # Set deployment parameters
-export TOKEN_NAME="GoJPY"
-export TOKEN_SYMBOL="GoJPY"
+export TOKEN_NAME="MyStablecoin"
+export TOKEN_SYMBOL="MYUSD"
 export TOKEN_DECIMALS=6
 export DEFAULT_MINT_CAP=1000000000000
 export ADMIN_ADDRESS=0x1234567890123456789012345678901234567890
 export DEFAULT_ADMIN_DELAY=172800  # 2 days in seconds
 export FREEZER_ADDRESS=0x2345678901234567890123456789012345678901
-export SUPPLY_CONTROLLER_ADDRESS=0x3456789012345678901234567890123456789012
+export MASTER_MINTER_ADDRESS=0x3456789012345678901234567890123456789012
 export UPGRADER_ADDRESS=0x4567890123456789012345678901234567890123
 export BLACKLISTER_ADDRESS=0x5678901234567890123456789012345678901234
 export RESCUER_ADDRESS=0x6789012345678901234567890123456789012345
@@ -62,7 +62,7 @@ Contains all functionality with parameterized initialization:
 - ✅ Minting and burning capabilities
 - ✅ Pausable functionality (freeze/unfreeze transfers)
 - ✅ Blacklisting mechanism
-- ✅ Role-based access control (6 roles: Admin, Freezer, Supply Controller, Upgrader, Blacklister, Rescuer)
+- ✅ Role-based access control (DEFAULT_ADMIN_ROLE, MASTER_MINTER_ROLE, MINTER, BRIDGE_MINTER, UPGRADER_ROLE, FREEZER_ROLE, BLACKLISTER_ROLE, RESCUER_ROLE)
 - ✅ UUPS upgradeability
 - ✅ **Parameterized initialization** (name, symbol, decimals, mint cap)
 
@@ -76,13 +76,13 @@ const Stablecoin = await ethers.getContractFactory("Stablecoin");
 const instance = await upgrades.deployProxy(
     Stablecoin,
     [
-        tokenName,        // e.g., "GoJPY"
-        tokenSymbol,      // e.g., "GoJPY"
+        tokenName,        // e.g., "MyStablecoin"
+        tokenSymbol,      // e.g., "MYUSD"
         tokenDecimals,    // e.g., 6
         adminAddress,
         defaultAdminDelay,
         freezerAddress,
-        supplyControllerAddress,
+        masterMinterAddress,
         upgraderAddress,
         blacklisterAddress,
         rescuerAddress,
@@ -100,14 +100,14 @@ Each deployment requires these environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TOKEN_NAME` | Full name of token | `"GoJPY"` |
-| `TOKEN_SYMBOL` | Token symbol | `"GoJPY"` |
+| `TOKEN_NAME` | Full name of token | `"MyStablecoin"` |
+| `TOKEN_SYMBOL` | Token symbol | `"MYUSD"` |
 | `TOKEN_DECIMALS` | Number of decimals | `6` |
 | `DEFAULT_MINT_CAP` | Mint cap per transaction | `1000000000000` (1M tokens) |
 | `ADMIN_ADDRESS` | Default admin address | `0x1234...` |
 | `DEFAULT_ADMIN_DELAY` | Admin change delay (seconds) | `172800` (2 days) |
 | `FREEZER_ADDRESS` | Freeze/unfreeze role | `0x5678...` |
-| `SUPPLY_CONTROLLER_ADDRESS` | Mint/burn role | `0x9abc...` |
+| `MASTER_MINTER_ADDRESS` | Master minter role (manages minters and bridge minters) | `0x9abc...` |
 | `UPGRADER_ADDRESS` | Upgrade role | `0xdef0...` |
 | `BLACKLISTER_ADDRESS` | Blacklist role | `0x1357...` |
 | `RESCUER_ADDRESS` | Token rescue role | `0x2468...` |
@@ -128,18 +128,18 @@ Before deploying to mainnet:
 10. ✅ Transfer roles to proper addresses
 11. ✅ Document proxy addresses
 
-### Example: Deploy GoJPY to Mainnet
+### Example: Deploy MyStablecoin to Mainnet
 
 ```bash
 # 1. Set all required environment variables
-export TOKEN_NAME="GoJPY"
-export TOKEN_SYMBOL="GoJPY"
+export TOKEN_NAME="MyStablecoin"
+export TOKEN_SYMBOL="MYUSD"
 export TOKEN_DECIMALS=6
 export DEFAULT_MINT_CAP=1000000000000
 export ADMIN_ADDRESS=0x...
 export DEFAULT_ADMIN_DELAY=172800
 export FREEZER_ADDRESS=0x...
-export SUPPLY_CONTROLLER_ADDRESS=0x...
+export MASTER_MINTER_ADDRESS=0x...
 export UPGRADER_ADDRESS=0x...
 export BLACKLISTER_ADDRESS=0x...
 export RESCUER_ADDRESS=0x...
@@ -148,17 +148,17 @@ export RESCUER_ADDRESS=0x...
 npx hardhat run scripts/deploy-token.ts --network mainnet
 
 # Output:
-# Deploying GoJPY (GoJPY) token with 6 decimals...
-# Token Name: GoJPY
-# Token Symbol: GoJPY
+# Deploying MyStablecoin (MYUSD) token with 6 decimals...
+# Token Name: MyStablecoin
+# Token Symbol: MYUSD
 # Token Decimals: 6
 # Default Mint Cap: 1000000000000
 # Admin: 0x...
-# GoJPY Proxy deployed to: 0x...
-# GoJPY Implementation deployed to: 0x...
+# MyStablecoin Proxy deployed to: 0x...
+# MyStablecoin Implementation deployed to: 0x...
 
 # 3. Save the proxy address!
-echo "GOJPY_PROXY=0x..." >> .env
+echo "MYSTABLECOIN_PROXY=0x..." >> .env
 ```
 
 ## Upgrading Stablecoins
@@ -175,7 +175,7 @@ Upgrade when you need to:
 
 ```bash
 # Upgrade a specific token
-TOKEN_NAME=GoJPY \
+TOKEN_NAME=MyStablecoin \
 PROXY_ADDRESS=0x... \
 npx hardhat run scripts/upgrade-token.ts --network mainnet
 ```
@@ -192,12 +192,13 @@ npx hardhat run scripts/upgrade-token.ts --network mainnet
    ```
 
 2. **Validate Storage Compatibility**
-   ```bash
-   npx hardhat validate-upgrade <proxy-address> <new-implementation>
-   ```
+
+   The `scripts/upgrade-token.ts` script validates the storage layout
+   automatically via `upgrades.validateUpgrade()` and aborts before
+   upgrading if the new implementation is incompatible.
 
 3. **Staged Rollout** (for production)
-   - Upgrade one token (e.g., GoUSD)
+   - Upgrade one token
    - Monitor for 24-48 hours
    - If successful, upgrade remaining tokens
 
@@ -286,14 +287,14 @@ All tests should pass:
 **Solution:**
 ```bash
 # Ensure all variables are set
-export TOKEN_NAME="GoJPY"
-export TOKEN_SYMBOL="GoJPY"
+export TOKEN_NAME="MyStablecoin"
+export TOKEN_SYMBOL="MYUSD"
 export TOKEN_DECIMALS=6
 # ... (set all required variables)
 
 # Or use a .env file
-echo 'TOKEN_NAME="GoJPY"' >> .env
-echo 'TOKEN_SYMBOL="GoJPY"' >> .env
+echo 'TOKEN_NAME="MyStablecoin"' >> .env
+echo 'TOKEN_SYMBOL="MYUSD"' >> .env
 # ... (add all variables)
 ```
 
@@ -304,20 +305,20 @@ echo 'TOKEN_SYMBOL="GoJPY"' >> .env
 1. Check you're not reordering storage variables
 2. Use namespaced storage for new variables
 3. Review the upgrade safety checklist
-4. Run: `npx hardhat validate-upgrade`
+4. Re-run `scripts/upgrade-token.ts` — it runs `upgrades.validateUpgrade()` and reports the incompatibility before upgrading
 
-## Real-World Example: Complete GoJPY Deployment
+## Real-World Example: Complete MyStablecoin Deployment
 
 ```bash
 # 1. Set environment variables
-export TOKEN_NAME="GoJPY"
-export TOKEN_SYMBOL="GoJPY"
+export TOKEN_NAME="MyStablecoin"
+export TOKEN_SYMBOL="MYUSD"
 export TOKEN_DECIMALS=6
 export DEFAULT_MINT_CAP=1000000000000
 export ADMIN_ADDRESS=0x123...
 export DEFAULT_ADMIN_DELAY=172800
 export FREEZER_ADDRESS=0x456...
-export SUPPLY_CONTROLLER_ADDRESS=0x789...
+export MASTER_MINTER_ADDRESS=0x789...
 export UPGRADER_ADDRESS=0xabc...
 export BLACKLISTER_ADDRESS=0xdef...
 export RESCUER_ADDRESS=0x012...
@@ -332,8 +333,8 @@ npx hardhat test
 
 # 4. Deploy to Sepolia testnet
 npx hardhat run scripts/deploy-token.ts --network sepolia
-# GoJPY Proxy deployed to: 0x678...
-# GoJPY Implementation deployed to: 0x901...
+# MyStablecoin Proxy deployed to: 0x678...
+# MyStablecoin Implementation deployed to: 0x901...
 
 # 5. Verify on Sepolia
 npx hardhat verify --network sepolia 0x901...
@@ -342,14 +343,14 @@ npx hardhat verify --network sepolia 0x901...
 
 # 7. Deploy to mainnet
 npx hardhat run scripts/deploy-token.ts --network mainnet
-# GoJPY Proxy deployed to: 0xABC...
-# GoJPY Implementation deployed to: 0xDEF...
+# MyStablecoin Proxy deployed to: 0xABC...
+# MyStablecoin Implementation deployed to: 0xDEF...
 
 # 8. Verify on mainnet
 npx hardhat verify --network mainnet 0xDEF...
 
 # 9. Save addresses
-echo "GOJPY_PROXY_MAINNET=0xABC..." >> .env.production
+echo "MYSTABLECOIN_PROXY_MAINNET=0xABC..." >> .env.production
 
 # Done! 🎉
 ```

@@ -3,9 +3,9 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: GoUSD
+  name: stablecoin-evm
   annotations:
-    github.com/project-slug: BitGo/GoUSD
+    github.com/project-slug: BitGo/stablecoin-evm
 spec:
   # The primary purpose of this component. If this repo serves multiple purposes
   # (e.g. both a deployable service and a published library), set this to whichever

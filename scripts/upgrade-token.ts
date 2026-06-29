@@ -1,15 +1,16 @@
+// Copyright (c) 2026 BitGo, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import { ethers, upgrades } from "hardhat";
 
 /**
  * Generic upgrade script for any stablecoin token
- * 
+ *
  * Usage:
- *   TOKEN_NAME=GoUSD PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --network mainnet
- *   TOKEN_NAME=GoEUR PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --network mainnet
- *   TOKEN_NAME=GoGBP PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --network mainnet
- * 
+ *   TOKEN_NAME=MyStablecoin PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade-token.ts --network mainnet
+ *
  * Environment variables required:
- * - TOKEN_NAME: Name of the token to upgrade (e.g., GoUSD, GoEUR, GoGBP)
+ * - TOKEN_NAME: Human-readable name of the token being upgraded (used for logging only)
  * - PROXY_ADDRESS: Address of the deployed proxy contract
  */
 async function main() {
@@ -17,7 +18,7 @@ async function main() {
   const proxyAddress = process.env.PROXY_ADDRESS;
 
   if (!tokenName) {
-    throw new Error("TOKEN_NAME environment variable is required (e.g., GoUSD, GoEUR, GoGBP)");
+    throw new Error("TOKEN_NAME environment variable is required (e.g., MyStablecoin)");
   }
 
   if (!proxyAddress) {
@@ -26,8 +27,9 @@ async function main() {
 
   console.log(`Upgrading ${tokenName} proxy at: ${proxyAddress}`);
 
-  // Get the new implementation
-  const TokenFactory = await ethers.getContractFactory(tokenName);
+  // Always use the "Stablecoin" contract name — TOKEN_NAME is the token's display
+  // name passed to initialize(), not the Hardhat artifact name.
+  const TokenFactory = await ethers.getContractFactory("Stablecoin");
 
   // Validate the upgrade
   console.log("Validating upgrade...");

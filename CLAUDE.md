@@ -1,8 +1,8 @@
-# GoUSD - Claude Code Configuration
+# Stablecoin EVM - Claude Code Configuration
 
 ## Project Overview
 
-GoUSD is a generic stablecoin smart contract system using the UUPS upgradeable proxy pattern. A single reusable Stablecoin contract can be deployed multiple times with different initialization parameters to create different tokens (GoUSD, GoEUR, GoGBP, etc.).
+Stablecoin EVM is a generic stablecoin smart contract system using the UUPS upgradeable proxy pattern. A single reusable `Stablecoin` contract can be deployed multiple times with different initialization parameters (name, symbol, decimals, mint cap, role addresses) to create independent tokens — for example, USD-, EUR-, or GBP-pegged stablecoins.
 
 ## Tech Stack
 
@@ -36,23 +36,27 @@ contracts/           # Solidity smart contracts
   Blacklistable.sol  # Blacklist functionality mixin
   ISupplyValidator.sol  # Supply validation interface
   MockSupplyValidator.sol  # Mock for testing
-scripts/             # Deployment scripts
+scripts/             # Deployment and upgrade scripts
 test/                # Hardhat test files (TypeScript)
 ```
 
 ## Contract Roles
 
-The Stablecoin contract uses role-based access control:
-- **owner**: Deploys the proxy
-- **upgrader**: Can upgrade contracts (UPGRADER_ROLE)
-- **supplyController**: Can mint and burn tokens (SUPPLY_CONTROLLER_ROLE)
-- **freezer**: Can pause/unpause contracts (FREEZER_ROLE)
-- **blacklister**: Can freeze addresses (BLACKLISTER_ROLE)
-- **rescuer**: Can rescue stuck tokens (RESCUER_ROLE)
+The Stablecoin contract uses OpenZeppelin `AccessControlDefaultAdminRules`:
+- **DEFAULT_ADMIN_ROLE**: governs admin transfers (set via `AccessControlDefaultAdminRules`)
+- **MASTER_MINTER_ROLE**: manages minters and bridge minters (add/remove/replenish)
+- **MINTER**: mints and burns tokens for native operations (granted by master minter)
+- **BRIDGE_MINTER**: mints and burns tokens for cross-chain bridge operations (granted by master minter)
+- **UPGRADER_ROLE**: can upgrade the contract implementation
+- **FREEZER_ROLE**: can pause/unpause all token transfers
+- **BLACKLISTER_ROLE**: can blacklist addresses from transacting
+- **RESCUER_ROLE**: can rescue ERC-20 tokens stuck in the contract
 
 ## Code Conventions
 
 - Solidity contracts use OpenZeppelin upgradeable patterns
+- Maintain storage layout compatibility for upgradeable contracts (see [STABLECOINS.md](./STABLECOINS.md))
+- All source files carry a `Copyright (c) 2026 BitGo, Inc. All rights reserved.` header and `SPDX-License-Identifier: Apache-2.0`
 - Tests are written in TypeScript using Hardhat's testing framework
 - Use `npx hardhat test` for running specific test files
 - Contract verification uses Etherscan API
@@ -68,13 +72,13 @@ Configured networks in `hardhat.config.ts`:
 
 ## CI/CD
 
-Pull requests trigger:
+Pull requests against `master` trigger:
 1. Unit tests (`npm test`)
 2. Linting (`npm run lint`)
 
 ## Security
 
-- Security contact: security@bitgo.com
+- Security contact: security@bitgo.com (see [SECURITY.md](./SECURITY.md))
 - Contracts implement rate-limited minting/burning
 - Blacklist functionality for compliance
 - Pausable for emergency stops
