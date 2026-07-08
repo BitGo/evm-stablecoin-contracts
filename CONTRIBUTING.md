@@ -56,6 +56,19 @@ npm run format
 - Use clear, descriptive commit messages
 - Reference issue numbers where applicable (e.g., `fix: resolve blacklist check on zero address (#42)`)
 
+### Developer Certificate of Origin (DCO)
+
+All contributions must be made under the [Developer Certificate of Origin](./DCO.md).
+Every commit must include a `Signed-off-by` line matching the commit author,
+which you can add automatically with `git commit -s`:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+Pull requests containing commits without a valid sign-off cannot be merged. See
+[DCO.md](./DCO.md) for details.
+
 ## Submitting Changes
 
 1. Ensure all tests pass: `npm test`
@@ -78,7 +91,7 @@ npm run format
 
 ## Governance
 
-This project is maintained by BitGo's Stablecoins team. The maintainers are responsible for reviewing and merging contributions, managing releases, and setting the project roadmap.
+This project is maintained by BitGo's Stablecoins team. The maintainers are responsible for reviewing and merging contributions, managing releases, and setting the project roadmap. See [GOVERNANCE.md](./GOVERNANCE.md) for the full governance model, roles, and decision-making process.
 
 ## License
 

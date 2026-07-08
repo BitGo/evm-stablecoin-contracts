@@ -10,6 +10,14 @@
   },
   "author": "BitGo",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BitGo/stablecoin-evm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BitGo/stablecoin-evm/issues"
+  },
+  "homepage": "https://github.com/BitGo/stablecoin-evm#readme",
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
     "@openzeppelin/contracts-upgradeable": "^5.0.0",
