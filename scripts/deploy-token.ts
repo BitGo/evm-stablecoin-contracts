@@ -7,7 +7,9 @@ import { ethers, upgrades } from "hardhat";
  * Generic deployment script for stablecoin tokens using the Stablecoin contract
  * 
  * Usage:
- *   TOKEN_NAME=MyStablecoin TOKEN_SYMBOL=MYUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
+ *   TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network mainnet
+ *   TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network bsc
+ *   TOKEN_NAME=GoUSD TOKEN_SYMBOL=GoUSD TOKEN_DECIMALS=6 npx hardhat run scripts/deploy-token.ts --network bscTestnet
  *
  * Environment variables required:
  * - TOKEN_NAME: Full name of the token (e.g., "MyStablecoin")
@@ -23,6 +25,13 @@ import { ethers, upgrades } from "hardhat";
  * - RESCUER_ADDRESS: Address for rescuer role
  */
 async function main() {
+  if (process.env.PROXY_CONTRACT_ADDRESS) {
+    throw new Error(
+      "PROXY_CONTRACT_ADDRESS is set, which means this contract is already deployed. " +
+      "Use scripts/manage-roles.ts to update roles instead."
+    );
+  }
+
   const tokenName = process.env.TOKEN_NAME;
   const tokenSymbol = process.env.TOKEN_SYMBOL;
   const tokenDecimals = process.env.TOKEN_DECIMALS;
