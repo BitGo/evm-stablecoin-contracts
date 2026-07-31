@@ -17,6 +17,10 @@ const {
   BSCSCAN_API_KEY,
   BSC_RPC_URL,
   BSC_TESTNET_RPC_URL,
+  POLYGON_RPC_URL,
+  MONAD_RPC_URL,
+  POLYGON_AMOY_RPC_URL,
+  MONAD_TESTNET_RPC_URL,
 } = process.env;
 
 const targetNetwork = process.env.HARDHAT_NETWORK;
@@ -25,6 +29,18 @@ if (targetNetwork === "bsc" && !BSC_RPC_URL) {
 }
 if (targetNetwork === "bscTestnet" && !BSC_TESTNET_RPC_URL) {
   console.warn("Warning: BSC_TESTNET_RPC_URL is not set. Falling back to public RPC. Set BSC_TESTNET_RPC_URL in .env.");
+}
+if (targetNetwork === "polygon" && !POLYGON_RPC_URL) {
+  console.warn("Warning: POLYGON_RPC_URL is not set. Falling back to public RPC — not safe for production deployments. Set POLYGON_RPC_URL in .env.");
+}
+if (targetNetwork === "monad" && !MONAD_RPC_URL) {
+  console.warn("Warning: MONAD_RPC_URL is not set. Falling back to public RPC — not safe for production deployments. Set MONAD_RPC_URL in .env.");
+}
+if (targetNetwork === "polygonAmoy" && !POLYGON_AMOY_RPC_URL) {
+  console.warn("Warning: POLYGON_AMOY_RPC_URL is not set. Falling back to public RPC. Set POLYGON_AMOY_RPC_URL in .env.");
+}
+if (targetNetwork === "monadTestnet" && !MONAD_TESTNET_RPC_URL) {
+  console.warn("Warning: MONAD_TESTNET_RPC_URL is not set. Falling back to public RPC. Set MONAD_TESTNET_RPC_URL in .env.");
 }
 
 const config: HardhatUserConfig = {
@@ -72,7 +88,30 @@ const config: HardhatUserConfig = {
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 97,
     },
+    polygon: {
+      url: POLYGON_RPC_URL?.trim() || 'https://polygon.drpc.org',
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 137,
+    },
+    monad: {
+      url: MONAD_RPC_URL?.trim() || 'https://rpc.monad.xyz',
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 143,
+    },
+    polygonAmoy: {
+      url: POLYGON_AMOY_RPC_URL?.trim() || 'https://polygon-amoy-public.nodies.app',
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 80002,
+    },
+    monadTestnet: {
+      url: MONAD_TESTNET_RPC_URL?.trim() || 'https://testnet-rpc.monad.xyz',
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
+      chainId: 10143,
+    },
   },
+  sourcify: {
+    enabled: true,
+},
   etherscan: {
     enabled: true,
     apiKey: {
@@ -82,6 +121,10 @@ const config: HardhatUserConfig = {
       hoodi: `${ETHERSCAN_API_KEY}`,
       bsc: BSCSCAN_API_KEY ?? '',
       bscTestnet: BSCSCAN_API_KEY ?? '',
+      polygon: `${ETHERSCAN_API_KEY}`,
+      monad: `${ETHERSCAN_API_KEY}`,
+      polygonAmoy: `${ETHERSCAN_API_KEY}`,
+      monadTestnet: `${ETHERSCAN_API_KEY}`,
     },
     customChains: [
       {
@@ -130,6 +173,38 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: 'https://api-testnet.bscscan.com/api',
           browserURL: 'https://testnet.bscscan.com'
+        }
+      },
+      {
+        network: 'polygon',
+        chainId: 137,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=137',
+          browserURL: 'https://polygonscan.com'
+        }
+      },
+      {
+        network: 'monad',
+        chainId: 143,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=143',
+          browserURL: 'https://monadscan.com'
+        }
+      },
+      {
+        network: 'polygonAmoy',
+        chainId: 80002,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=80002',
+          browserURL: 'https://amoy.polygonscan.com'
+        }
+      },
+      {
+        network: 'monadTestnet',
+        chainId: 10143,
+        urls: {
+          apiURL: 'https://api.etherscan.io/v2/api?chainid=10143',
+          browserURL: 'https://testnet.monadscan.com'
         }
       }
     ],
