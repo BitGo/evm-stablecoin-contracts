@@ -6,10 +6,6 @@ on:
       - master
 
 jobs:
-  # This job is a public-side trigger for ci-public-proxy.
-  # The proxy watches this workflow and dispatches
-  # stablecoin-evm-internal-checks.yaml in BitGo/ci-public-proxy,
-  # which runs the dependency age check using private Vault credentials.
   trigger:
     runs-on: ubuntu-latest
     steps:
