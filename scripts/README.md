@@ -24,6 +24,39 @@ RESCUER_ADDRESS=0x... \
 npx hardhat run scripts/deploy-token.ts --network mainnet
 ```
 
+### 1b. Reproduce an Existing Address on a New Chain - `deploy-deterministic.ts`
+
+Use this instead of `deploy-token.ts` when the token is already deployed on another
+chain and the new deployment must land at the **same address**. Address parity relies
+on CREATE semantics: same deployer EOA + same nonces (implementation at nonce N,
+proxy at nonce N+1). The script refuses to broadcast unless every precondition holds,
+and never hardcodes a gas limit (so reverting transactions fail off-chain during gas
+estimation instead of burning a nonce on-chain).
+
+Takes all `deploy-token.ts` variables plus:
+
+| Variable | Description |
+|----------|-------------|
+| `EXPECTED_CHAIN_ID` | Chain id the RPC must report (e.g. `137`, `143`) |
+| `EXPECTED_DEPLOYER_ADDRESS` | Deployer EOA used on the reference chain |
+| `EXPECTED_PROXY_ADDRESS` | Token (proxy) address to reproduce |
+| `EXPECTED_IMPLEMENTATION_ADDRESS` | (Optional) implementation address to reproduce |
+| `REFERENCE_RPC_URL` | (Optional) RPC of the chain where the token already exists; preflight verifies name/symbol/decimals AND runtime bytecode against the live token and aborts on mismatch. Unset: mainnet targets default to Ethereum mainnet (needs `INFURA_API_KEY`), testnet targets to Hoodi |
+| `ALLOW_BYTECODE_MISMATCH` | (Optional) set `true` to proceed when the compiled bytecode differs from the reference implementation (i.e. intentionally deploying newer contract code) |
+| `GAS_BUFFER_PERCENT` | (Optional) balance-check buffer, default `25` |
+| `DRY_RUN` | Set `true` to run all preflight checks without broadcasting |
+
+```bash
+DRY_RUN=true TOKEN_NAME=... TOKEN_SYMBOL=... TOKEN_DECIMALS=6 DEFAULT_MINT_CAP=... \
+ADMIN_ADDRESS=0x... DEFAULT_ADMIN_DELAY=... FREEZER_ADDRESS=0x... \
+MASTER_MINTER_ADDRESS=0x... UPGRADER_ADDRESS=0x... BLACKLISTER_ADDRESS=0x... \
+RESCUER_ADDRESS=0x... EXPECTED_CHAIN_ID=137 EXPECTED_DEPLOYER_ADDRESS=0x... \
+EXPECTED_PROXY_ADDRESS=0x... EXPECTED_IMPLEMENTATION_ADDRESS=0x... \
+npx hardhat run scripts/deploy-deterministic.ts --network polygon
+```
+
+Run once with `DRY_RUN=true`, review the preflight output, then run without it.
+
 ### 2. Upgrade Any Token - `upgrade-token.ts`
 
 Upgrade any stablecoin by specifying the token name and proxy address:
