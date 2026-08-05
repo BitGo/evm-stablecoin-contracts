@@ -1,0 +1,84 @@
+name: DCO
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  dco:
+    name: DCO sign-off check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check DCO sign-off on all PR commits
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${BASE_SHA}" || -z "${HEAD_SHA}" ]]; then
+            echo "ERROR: BASE_SHA or HEAD_SHA is empty — cannot determine commit range."
+            exit 1
+          fi
+
+          # Use the true merge-base so the range is correct even when the base
+          # branch has advanced since this PR branch was forked.
+          MERGE_BASE=$(git merge-base "${BASE_SHA}" "${HEAD_SHA}")
+
+          missing=()
+          while IFS= read -r sha; do
+            # Strip CRLF so matching works for Windows-authored commits.
+            msg=$(git log --format=%B -n 1 "$sha" | tr -d '\r')
+            author_email=$(git log --format=%ae -n 1 "$sha")
+
+            if [[ -z "$author_email" ]]; then
+              echo "ERROR: commit $sha has no author email configured."
+              missing+=("$sha")
+              continue
+            fi
+
+            # Extract the email from every Signed-off-by line and compare it to
+            # the commit author email as a plain string (case-insensitive).
+            # Embedding author_email directly in a regex pattern is unsafe because
+            # email addresses can contain ERE metacharacters (e.g. + in Gmail tags
+            # or GitHub noreply addresses like 12345678+username@users.noreply.github.com).
+            author_lower=$(printf '%s' "$author_email" | tr '[:upper:]' '[:lower:]')
+            matched=false
+            while IFS= read -r sob_line; do
+              sob_email=$(printf '%s' "$sob_line" | sed 's/.*<\(.*\)>[[:space:]]*/\1/' | tr '[:upper:]' '[:lower:]')
+              if [[ "$sob_email" == "$author_lower" ]]; then
+                matched=true
+                break
+              fi
+            done < <(printf '%s\n' "$msg" | grep -i "^Signed-off-by:")
+
+            if [[ "$matched" != "true" ]]; then
+              missing+=("$sha")
+            fi
+          done < <(git log --no-merges --format=%H "${MERGE_BASE}..${HEAD_SHA}")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "The following commits are missing a valid 'Signed-off-by' trailer"
+            echo "matching the commit author:"
+            for sha in "${missing[@]}"; do
+              author=$(git log --format="%an <%ae>" -n 1 "$sha")
+              echo "  $sha  $(git log --format=%s -n 1 "$sha")"
+              echo "         author: $author"
+            done
+            echo ""
+            echo "Add a sign-off with 'git commit -s' or amend existing commits."
+            echo "See CONTRIBUTING.md and DCO.md for details."
+            exit 1
+          fi
+
+          echo "All commits have a valid DCO sign-off."
