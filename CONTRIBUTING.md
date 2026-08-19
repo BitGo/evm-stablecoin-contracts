@@ -1,11 +1,11 @@
-# Contributing to stablecoin-evm
+# Contributing to evm-stablecoin-contracts
 
 Thank you for your interest in contributing to this project! This document provides guidelines for contributing.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/<your-username>/stablecoin-evm.git`
+2. Clone your fork: `git clone https://github.com/<your-username>/evm-stablecoin-contracts.git`
 3. Install dependencies: `npm install`
 4. Create a branch: `git checkout -b feature/your-feature-name`
 

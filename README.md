@@ -1,4 +1,4 @@
-# Stablecoin EVM Contracts
+# EVM Stablecoin Contracts
 
 A generic, EVM-compatible stablecoin smart contract system using the UUPS upgradeable proxy pattern. A single reusable contract can be deployed multiple times with different initialization parameters to create independent stablecoins.
 
