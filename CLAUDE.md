@@ -1,8 +1,8 @@
-# Stablecoin EVM - Claude Code Configuration
+# EVM Stablecoin Contracts - Claude Code Configuration
 
 ## Project Overview
 
-Stablecoin EVM is a generic stablecoin smart contract system using the UUPS upgradeable proxy pattern. A single reusable `Stablecoin` contract can be deployed multiple times with different initialization parameters (name, symbol, decimals, mint cap, role addresses) to create independent tokens — for example, USD-, EUR-, or GBP-pegged stablecoins.
+EVM Stablecoin Contracts (`evm-stablecoin-contracts`) is a generic stablecoin smart contract system using the UUPS upgradeable proxy pattern. A single reusable `Stablecoin` contract can be deployed multiple times with different initialization parameters (name, symbol, decimals, mint cap, role addresses) to create independent tokens — for example, USD-, EUR-, or GBP-pegged stablecoins.
 
 ## Tech Stack
 

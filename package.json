@@ -1,5 +1,5 @@
 {
-  "name": "stablecoin-evm",
+  "name": "evm-stablecoin-contracts",
   "version": "1.0.0",
   "description": "Generic stablecoin smart contract system using UUPS upgradeable proxy pattern",
   "main": "index.js",
@@ -12,12 +12,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/BitGo/stablecoin-evm.git"
+    "url": "https://github.com/BitGo/evm-stablecoin-contracts.git"
   },
   "bugs": {
-    "url": "https://github.com/BitGo/stablecoin-evm/issues"
+    "url": "https://github.com/BitGo/evm-stablecoin-contracts/issues"
   },
-  "homepage": "https://github.com/BitGo/stablecoin-evm#readme",
+  "homepage": "https://github.com/BitGo/evm-stablecoin-contracts#readme",
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
     "@openzeppelin/contracts-upgradeable": "^5.0.0",
