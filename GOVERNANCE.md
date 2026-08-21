@@ -1,12 +1,12 @@
 # Governance
 
-This document describes the governance model for the `stablecoin-evm` project: the
+This document describes the governance model for the `evm-stablecoin-contracts` project: the
 roles participants can hold, how decisions are made, and how the community
 participates.
 
 ## Overview
 
-`stablecoin-evm` is an open source project maintained by BitGo. BitGo retains
+`evm-stablecoin-contracts` is an open source project maintained by BitGo. BitGo retains
 final decision-making authority over the project's direction, releases, and
 acceptance of contributions. The project follows a **maintainer (BDFL-style)
 governance model** with a designated set of maintainers from BitGo's Stablecoins
