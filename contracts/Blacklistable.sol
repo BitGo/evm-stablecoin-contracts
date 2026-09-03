@@ -10,6 +10,7 @@ import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefau
  * @dev Contract that allows blacklisting of accounts.
  *  We are using the last bit of the balance to store the blacklist state.
  */
+/// @custom:oz-upgrades-unsafe-allow missing-initializer
 contract Blacklistable is
     AccessControlDefaultAdminRulesUpgradeable,
     ERC20Upgradeable

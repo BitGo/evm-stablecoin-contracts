@@ -3,9 +3,11 @@
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, network, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import {
   DeterministicConfig,
   checkNoOzManifest,
@@ -17,6 +19,10 @@ import {
   stripCborMetadata,
   defaultReferenceRpcUrl,
 } from "../scripts/deploy-deterministic";
+const connection = await hre.network.getOrCreate();
+const { ethers } = connection;
+const upgrades = await upgradesFactory(hre, connection);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Explicit rejection helper: asserts the promise rejects and that the error
@@ -126,26 +132,26 @@ describe("deploy-deterministic script", function () {
 
     it("rejects when code already exists at the predicted implementation address", async function () {
       const config = await buildAlignedConfig();
-      await network.provider.send("hardhat_setCode", [
+      await ethers.provider.send("hardhat_setCode", [
         config.expectedImplementation,
         "0x60006000fd",
       ]);
       try {
         await expectReject(preflight(config), "code already exists");
       } finally {
-        await network.provider.send("hardhat_setCode", [config.expectedImplementation, "0x"]);
+        await ethers.provider.send("hardhat_setCode", [config.expectedImplementation, "0x"]);
       }
     });
 
     it("rejects when the deployer has in-flight (pending) transactions", async function () {
       const config = await buildAlignedConfig();
-      await network.provider.send("evm_setAutomine", [false]);
+      await ethers.provider.send("evm_setAutomine", [false]);
       try {
         await deployer.sendTransaction({ to: freezer.address, value: 1n });
         await expectReject(preflight(config), "in-flight");
       } finally {
-        await network.provider.send("evm_setAutomine", [true]);
-        await network.provider.send("evm_mine");
+        await ethers.provider.send("evm_setAutomine", [true]);
+        await ethers.provider.send("evm_mine");
       }
     });
 
@@ -153,14 +159,14 @@ describe("deploy-deterministic script", function () {
       const config = await buildAlignedConfig();
       const originalBalance = await ethers.provider.getBalance(deployer.address);
       // 1 wei: far below the cost of either transaction.
-      await network.provider.send("hardhat_setBalance", [deployer.address, "0x1"]);
+      await ethers.provider.send("hardhat_setBalance", [deployer.address, "0x1"]);
       try {
         // Depending on the node this fails at gas estimation (upfront-cost
         // validation) or at the explicit balance check — both are preflight
         // failures that abort before any broadcast.
         await expectReject(preflight(config), "PREFLIGHT FAILED");
       } finally {
-        await network.provider.send("hardhat_setBalance", [
+        await ethers.provider.send("hardhat_setBalance", [
           deployer.address,
           "0x" + originalBalance.toString(16),
         ]);
@@ -324,7 +330,7 @@ describe("deploy-deterministic script", function () {
       const validator = await validatorArtifact.deploy();
       await validator.waitForDeployment();
       const otherCode = await ethers.provider.getCode(await validator.getAddress());
-      await network.provider.send("hardhat_setCode", [referenceImpl, otherCode]);
+      await ethers.provider.send("hardhat_setCode", [referenceImpl, otherCode]);
       try {
         const config = await configAgainstReference();
         await expectReject(
@@ -335,7 +341,7 @@ describe("deploy-deterministic script", function () {
         const permissive = await configAgainstReference({ allowBytecodeMismatch: true });
         await verifyReferenceBytecode(permissive, ethers.provider);
       } finally {
-        await network.provider.send("hardhat_setCode", [referenceImpl, original]);
+        await ethers.provider.send("hardhat_setCode", [referenceImpl, original]);
       }
     });
 

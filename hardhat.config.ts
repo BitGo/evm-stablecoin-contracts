@@ -1,12 +1,9 @@
 // Copyright (c) 2026 BitGo, Inc. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-verify";
-import "@nomicfoundation/hardhat-toolbox";
-import "@nomiclabs/hardhat-solhint";
-import "@openzeppelin/hardhat-upgrades";
+import { defineConfig } from "hardhat/config";
+import hardhatToolboxMochaEthers from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
+import hardhatUpgrades from "@openzeppelin/hardhat-upgrades";
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -43,7 +40,8 @@ if (targetNetwork === "monadTestnet" && !MONAD_TESTNET_RPC_URL) {
   console.warn("Warning: MONAD_TESTNET_RPC_URL is not set. Falling back to public RPC. Set MONAD_TESTNET_RPC_URL in .env.");
 }
 
-const config: HardhatUserConfig = {
+const config = defineConfig({
+  plugins: [hardhatToolboxMochaEthers, hardhatUpgrades],
   solidity: {
     version: "0.8.30",
     settings: {
@@ -56,55 +54,65 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
-      loggingEnabled: false
+      type: "edr-simulated",
     },
     holesky: {
+      type: "http",
       url: `https://rpc.holesky.ethpandaops.io/`,
-      accounts: DEPLOYMENT_KEY? [`${DEPLOYMENT_KEY}`]: [],
+      accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 17000,
     },
     sepolia: {
+      type: "http",
       url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 11155111,
     },
     mainnet: {
+      type: "http",
       url: `https://mainnet.infura.io/v3/${INFURA_API_KEY}`,
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 1,
     },
     hoodi: {
+      type: "http",
       url: `https://rpc.hoodi.ethpandaops.io/`,
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
-      chainId: 560048
+      chainId: 560048,
     },
     bsc: {
-      url: BSC_RPC_URL?.trim() || 'https://bsc-dataseed.binance.org/',
+      type: "http",
+      url: BSC_RPC_URL?.trim() || "https://bsc-dataseed.binance.org/",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 56,
     },
     bscTestnet: {
-      url: BSC_TESTNET_RPC_URL?.trim() || 'https://bsc-testnet-rpc.publicnode.com',
+      type: "http",
+      url: BSC_TESTNET_RPC_URL?.trim() || "https://bsc-testnet-rpc.publicnode.com",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 97,
     },
     polygon: {
-      url: POLYGON_RPC_URL?.trim() || 'https://polygon.drpc.org',
+      type: "http",
+      url: POLYGON_RPC_URL?.trim() || "https://polygon.drpc.org",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 137,
     },
     monad: {
-      url: MONAD_RPC_URL?.trim() || 'https://rpc.monad.xyz',
+      type: "http",
+      url: MONAD_RPC_URL?.trim() || "https://rpc.monad.xyz",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 143,
     },
     polygonAmoy: {
-      url: POLYGON_AMOY_RPC_URL?.trim() || 'https://polygon-amoy-public.nodies.app',
+      type: "http",
+      url: POLYGON_AMOY_RPC_URL?.trim() || "https://polygon-amoy-public.nodies.app",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 80002,
     },
     monadTestnet: {
-      url: MONAD_TESTNET_RPC_URL?.trim() || 'https://testnet-rpc.monad.xyz',
+      type: "http",
+      url: MONAD_TESTNET_RPC_URL?.trim() || "https://testnet-rpc.monad.xyz",
       accounts: DEPLOYMENT_KEY ? [`${DEPLOYMENT_KEY}`] : [],
       chainId: 10143,
     },
@@ -209,5 +217,5 @@ const config: HardhatUserConfig = {
       }
     ],
   }
-};
+});
 export default config;

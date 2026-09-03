@@ -18,12 +18,14 @@ const compat = new FlatCompat({
 });
 
 export default [
+  { ignores: ["types/ethers-contracts/**"] },
     ...compat.extends(
       "eslint:recommended",
       "plugin:@typescript-eslint/recommended",
       "plugin:@typescript-eslint/stylistic"
     ),
   {
+    ignores: ["types/ethers-contracts/**"],
     plugins: {
       "chai-friendly": chaiFriendly,
     },

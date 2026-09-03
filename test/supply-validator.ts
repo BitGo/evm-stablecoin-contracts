@@ -3,8 +3,12 @@
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import { Stablecoin, MockSupplyValidator } from "../typechain-types";
+const connection = await hre.network.getOrCreate();
+const { ethers } = connection;
+const upgrades = await upgradesFactory(hre, connection);
 
 describe("Supply Validator", function () {
   let contractInstance: Stablecoin;
@@ -82,7 +86,7 @@ describe("Supply Validator", function () {
     it("Should fail to set supply validator by unauthorized address", async function () {
       await expect(
         contractInstance.connect(unauthorized).setSupplyValidator(mockValidator.getAddress())
-      ).to.be.reverted;
+      ).to.be.revert(ethers);
     });
 
     it("Should allow setting validator to zero address (disable validation)", async function () {

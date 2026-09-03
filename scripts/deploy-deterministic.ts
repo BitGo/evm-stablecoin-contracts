@@ -1,11 +1,18 @@
 // Copyright (c) 2026 BitGo, Inc. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { ethers, upgrades, artifacts } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import { networkNames } from "@openzeppelin/upgrades-core";
 import type { Provider } from "ethers";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const connection = await hre.network.getOrCreate();
+const { ethers } = connection;
+const artifacts = hre.artifacts;
+const upgrades = await upgradesFactory(hre, connection);
 
 /**
  * Deterministic deployment script for reproducing an existing token address
@@ -370,9 +377,13 @@ export async function verifyReferenceBytecode(
   // artifact with immutable positions filled with the implementation address.
   const artifact = await artifacts.readArtifact("Stablecoin");
   const localBytes = ethers.getBytes(artifact.deployedBytecode);
-  const buildInfo = await artifacts.getBuildInfo("contracts/Stablecoin.sol:Stablecoin");
+  const buildInfoId = await artifacts.getBuildInfoId("contracts/Stablecoin.sol:Stablecoin");
+  const buildInfoPath = buildInfoId ? await artifacts.getBuildInfoOutputPath(buildInfoId) : undefined;
+  const buildInfo = buildInfoPath
+    ? JSON.parse(await fs.promises.readFile(buildInfoPath, "utf8"))
+    : undefined;
   const immutableReferences =
-    buildInfo?.output.contracts?.["contracts/Stablecoin.sol"]?.["Stablecoin"]?.evm
+    buildInfo?.output.contracts?.["project/contracts/Stablecoin.sol"]?.["Stablecoin"]?.evm
       ?.deployedBytecode?.immutableReferences ?? {};
   for (const references of Object.values(immutableReferences)) {
     for (const { start, length } of references) {
@@ -741,7 +752,7 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;

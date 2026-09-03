@@ -3,9 +3,13 @@
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import { Stablecoin } from "../typechain-types";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+const connection = await hre.network.getOrCreate();
+const { ethers, networkHelpers } = connection;
+const { time } = networkHelpers;
+const upgrades = await upgradesFactory(hre, connection);
 
 describe("Minting,  Burning And Token Rescue", function () {
   let contractInstance: Stablecoin;
@@ -197,7 +201,7 @@ describe("Minting,  Burning And Token Rescue", function () {
         recoverAddress.address,
         transferAmount  
       )
-    ).to.be.reverted;
+    ).to.be.revert(ethers);
   });
   
   it("Should fail to rescue tokens to address zero", async function() {
@@ -897,7 +901,7 @@ describe("Minting,  Burning And Token Rescue", function () {
       // User1 (not a minter) tries to burn user2's tokens - should fail
       await expect(
         contractInstance.connect(user1).burn(user2.address, mintAmount)
-      ).to.be.reverted; // Will revert due to lack of MINTER role
+      ).to.be.revert(ethers); // Will revert due to lack of MINTER role
     });
 
     it("Should handle multiple approvals and burns correctly", async function () {

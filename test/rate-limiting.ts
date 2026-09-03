@@ -3,9 +3,13 @@
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import { Stablecoin } from "../typechain-types";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+const connection = await hre.network.getOrCreate();
+const { ethers, networkHelpers } = connection;
+const { time } = networkHelpers;
+const upgrades = await upgradesFactory(hre, connection);
 
 describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function () {
   let contractInstance: Stablecoin;
@@ -129,7 +133,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
         contractInstance
           .connect(randomAddress)
           .configureMinter(randomAddress.address, DAILY_MINT_LIMIT, DAILY_BURN_LIMIT)
-      ).to.be.reverted;
+      ).to.be.revert(ethers);
     });
 
     it("Should update minter limits successfully", async function () {
@@ -208,7 +212,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
 
       await expect(
         contractInstance.connect(randomAddress).mint(user1.address, mintAmount)
-      ).to.be.reverted;
+      ).to.be.revert(ethers);
     });
 
     it("Should fail to mint exceeding daily limit", async function () {
@@ -354,7 +358,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
 
       await expect(
         contractInstance.connect(randomAddress).bridgeMint(user1.address, mintAmount)
-      ).to.be.reverted;
+      ).to.be.revert(ethers);
     });
 
     it("Should fail to bridge mint exceeding daily limit", async function () {
@@ -851,7 +855,7 @@ describe("Rate Limiting - Master Minter, Minter, and Bridge Minter", function ()
     it("Should fail when called by non-master-minter", async function () {
       await expect(
         contractInstance.connect(randomAddress).replenishMinterLimits(testMinter.address, false)
-      ).to.be.reverted;
+      ).to.be.revert(ethers);
     });
 
     it("Should fail when replenishing non-configured native minter", async function () {

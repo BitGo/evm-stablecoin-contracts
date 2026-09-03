@@ -1,5 +1,6 @@
-import { ethers } from "hardhat";
+import hre from "hardhat";
 import * as readline from "readline";
+const { ethers } = await hre.network.getOrCreate();
 
 /**
  * Role management script for deployed stablecoin contracts.

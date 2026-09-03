@@ -1,7 +1,11 @@
 // Copyright (c) 2026 BitGo, Inc. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { ethers, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
+const connection = await hre.network.getOrCreate();
+const { ethers } = connection;
+const upgrades = await upgradesFactory(hre, connection);
 
 /**
  * Generic deployment script for stablecoin tokens using the Stablecoin contract

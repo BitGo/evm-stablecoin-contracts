@@ -3,8 +3,12 @@
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, upgrades } from "hardhat";
+import hre from "hardhat";
+import { upgrades as upgradesFactory } from "@openzeppelin/hardhat-upgrades";
 import { Stablecoin } from "../typechain-types";
+const connection = await hre.network.getOrCreate();
+const { ethers } = connection;
+const upgrades = await upgradesFactory(hre, connection);
 
 describe("pause", function () {
   let contractInstance: Stablecoin;

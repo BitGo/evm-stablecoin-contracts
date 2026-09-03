@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
-    "lint": "eslint . && hardhat check",
+    "lint": "eslint . && solhint \"contracts/**/*.sol\"",
     "format": "prettier --write --plugin=prettier-plugin-solidity 'contracts/*.sol'"
   },
   "author": "BitGo",
@@ -21,24 +21,22 @@
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
     "@openzeppelin/contracts-upgradeable": "^5.0.0",
-    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "@openzeppelin/hardhat-upgrades": "4.1.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@eslint/compat": "^1.1.1",
     "@eslint/eslintrc": "3.3.6",
     "@eslint/js": "^9.10.0",
-    "@nomicfoundation/hardhat-ethers": "^3.0.6",
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "@nomicfoundation/hardhat-verify": "^2.0.8",
-    "@nomiclabs/hardhat-solhint": "^4.0.1",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "3.0.7",
     "@types/eslint__js": "^8.42.3",
     "axios": "1.19.0",
     "eslint": "^9.39.4",
     "eslint-plugin-chai-friendly": "^1.0.1",
-    "hardhat": "^2.22.6",
+    "hardhat": "3.14.0",
     "prettier": "^3.3.3",
     "prettier-plugin-solidity": "^1.4.1",
+    "solhint": "5.0.3",
     "typescript": "^5.6.2",
     "typescript-cached-transpile": "^0.0.6",
     "typescript-eslint": "8.60.1"
@@ -97,5 +95,6 @@
       }
     },
     "uuid": "^11.1.1"
-  }
+  },
+  "type": "module"
 }
