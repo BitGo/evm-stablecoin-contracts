@@ -40,4 +40,6 @@ We follow a coordinated disclosure process. We ask that you give us reasonable t
 
 ## Bug Bounty
 
-Please contact security@bitgo.com for information about our bug bounty program.
+BitGo runs a public Web3 bug bounty program on Cantina, covering smart
+contract vulnerabilities in scope. See the program page for scope, reward
+tiers, and submission details: https://cantina.xyz/bounties/78a734d2-b460-4245-9c81-833487d6a339
