@@ -300,6 +300,8 @@ contract Stablecoin is
      * - `minters`: Maps native minter addresses to their configurations.
      * - `bridgeMinters`: Maps bridge minter addresses to their configurations.
      * - `supplyValidator`: Address of the supply validator contract.
+     *
+     * @custom:storage-location erc7201:contract.storage.Stablecoin
      */
     struct StablecoinStorage {
         uint256 mintCapPerTransaction;
